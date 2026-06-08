@@ -1,0 +1,16 @@
+{
+  "scripts": {
+    "aidlc": "bun scripts/aidlc.ts",
+    "aidlc:new": "bun scripts/aidlc.ts new",
+    "aidlc:status": "bun scripts/aidlc.ts status",
+    "aidlc:next": "bun scripts/aidlc.ts next",
+    "aidlc:validate": "bun scripts/aidlc.ts validate"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.2"
+  },
+  "dependencies": {
+    "fs": "^0.0.1-security",
+    "path": "^0.12.7"
+  }
+}
