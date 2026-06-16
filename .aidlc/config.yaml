@@ -5,6 +5,7 @@ branches:
   default: main
   development: dev
   intent_prefix: intent/
+  enforce_intent_branch: true
 
 review:
   max_cycles: 3

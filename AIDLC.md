@@ -59,6 +59,12 @@ bun aidlc:new "Add login page"
 bun aidlc:status
 ```
 
+### Verify Intent Branch
+
+```bash
+bun aidlc:branch INTENT-001
+```
+
 ### Doctor
 
 ```bash
@@ -76,6 +82,7 @@ These rules override any agent-specific behavior.
 - Never push without explicit developer approval.
 - Update the intent after each completed stage.
 - Use the CLI state machine for status transitions.
+- Verify the intent branch before moving to `in_development`.
 - Run project validation before marking an intent as approved or done.
 - Never modify unrelated code.
 - Never change architecture without notifying the developer.
@@ -94,6 +101,32 @@ intent/001-add-login-page
 ```
 
 Unless explicitly requested by the developer, implementation should not occur directly in the default development branch.
+
+---
+
+# Out-Of-Lifecycle Work
+
+Users may ask questions outside the development lifecycle. These interactions do not need an intent when they are read-only and do not change repository state.
+
+No intent is required for:
+
+- Questions
+- Explanations
+- Brainstorming
+- Read-only exploration
+- Meta discussion about AI-DLC itself
+
+An intent is required for:
+
+- File edits
+- Code changes
+- Tests
+- Review
+- Documentation updates
+- Lifecycle transitions
+- Persistent repo/process changes
+
+If a read-only discussion turns into implementation work, create or select an intent before editing files.
 
 ---
 
@@ -194,6 +227,14 @@ backlog
 ```
 
 after being rewritten.
+
+Before moving an intent to `in_development`, verify the current branch:
+
+```bash
+bun aidlc:branch INTENT-001
+```
+
+When branch enforcement is enabled, `context_ready -> in_development` fails if the current Git branch does not match the intent's `branch:` field.
 
 Use:
 
@@ -441,11 +482,43 @@ The config defines:
 
 - Active governance profile
 - Branch naming
+- Branch enforcement
 - Maximum review cycles
 - Validation commands
 - Required agents
 - Approval gates
 - Lifecycle transitions
+
+---
+
+# Codex Model And Reasoning Verification
+
+Codex model defaults belong in `~/.codex/config.toml`. Trusted repositories can also provide project-scoped overrides in `.codex/config.toml`.
+
+Common settings:
+
+```toml
+model = "gpt-5.5"
+model_reasoning_effort = "high"
+```
+
+Configuration precedence, highest first:
+
+- CLI flags and `--config` overrides
+- Trusted project `.codex/config.toml`
+- Selected profile config
+- User `~/.codex/config.toml`
+- System config
+- Built-in defaults
+
+To verify intended configuration:
+
+```bash
+codex --model gpt-5.5
+codex --config model_reasoning_effort='"high"'
+```
+
+For runtime evidence, enable Codex logs or OpenTelemetry. Conversation start events include model and reasoning settings, which are stronger evidence than reading config files alone.
 
 ---
 
