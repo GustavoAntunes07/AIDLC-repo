@@ -1,71 +1,118 @@
 ---
 name: brainstorming
 description: >
-  Use this skill whenever the user wants to think through a problem before writing code, explore different ways to implement a feature, compare architectural approaches, or generate and rank ideas. Trigger this skill for prompts like "what's the best way to...", "I'm thinking about...", "help me decide between...", "what are my options for...", "how should I approach...", "brainstorm ideas for...", or any time the user is at a decision point before or during development. Also trigger when the user is stuck and needs to explore alternatives — even if they don't use the word "brainstorm". Do NOT wait for an explicit brainstorm request; if the intent is exploration or decision-making, use this skill.
+  Use this skill whenever the user wants to think through a problem before writing code, explore different ways to implement a feature, compare architectural approaches, stress-test a plan, or generate and rank ideas. Trigger on prompts like "what's the best way to...", "I'm thinking about...", "help me decide between...", "what are my options for...", "how should I approach...", "brainstorm ideas for...", "grill me on this", "stress-test my plan", or any time the user is at a decision point before or during development. Also trigger when the user is stuck and needs to explore alternatives — even if they don't use the word "brainstorm". Do NOT wait for an explicit request; if the intent is exploration, decision-making, or plan validation, use this skill.
 ---
 
 # Brainstorming Skill
 
-Helps the user think through features, architectural decisions, and implementation approaches — generating ranked ideas with a clear recommendation.
+Combines idea generation with relentless questioning — exploring options, grilling the user on each decision branch, and refining toward a clear recommendation. Runs as an iterative loop, not a one-shot answer.
 
 ---
 
-## When to use context vs. not
+## The Loop
 
-- **With code context**: If the user mentions files, the current stack, or says something like "in this project" or "given what we have" — read the relevant files before brainstorming. Tailor every option to what's already there.
-- **Without context**: If the question is abstract or the user doesn't reference the codebase — brainstorm from first principles. Keep options general enough to apply to different stacks.
-- **Ambiguous**: If it's unclear, make a reasonable assumption and state it briefly at the top ("I'm treating this as a greenfield decision — let me know if you want me to factor in the existing code.").
+This skill operates in repeating cycles, not a single pass:
+
+```
+🔭 EXPLORE  → Generate options for the current decision node
+❓ GRILL    → Ask the sharpest question that resolves the next branch
+⭐ REFINE   → Incorporate the answer, narrow the options, repeat
+```
+
+Continue the loop until the design space is fully resolved — all major branches answered, dependencies settled, recommendation locked.
 
 ---
 
-## Output format
+## How to run this skill
 
-Produce a **free-form ranked list** of options. Structure each entry like this:
+### Step 1 — Orient
+Before generating anything, understand the scope. Read relevant files if the user references the codebase. If the question is abstract, state your working assumption briefly:
+> "Treating this as a greenfield decision — let me know if I should factor in the existing code."
+
+### Step 2 — EXPLORE: Generate the first set of options
+Produce a ranked list of 3–5 options for the top-level decision. For each option:
 
 ```
 ## Option N — [Short Name]
-
-[1–2 sentence description of the approach.]
-
-**Why it works**: [Strengths in this context]
-**Trade-offs**: [Weaknesses, costs, risks]
-**Best when**: [The condition that makes this the right pick]
+[1–2 sentence description]
+**Why it works**: [strengths in this context]
+**Trade-offs**: [costs, risks, limitations]
+**Best when**: [the condition that makes this the right pick]
 ```
 
-After all options, add a **Recommendation** section:
+### Step 3 — GRILL: Ask the next decision-forcing question
+Immediately after the options, ask the single most important question that would change which option wins. This is not a clarifying question — it's a question that resolves a branch of the decision tree.
+
+Format:
+```
+❓ [Sharp, specific question about the design]
+→ My recommendation: [your answer + one-sentence justification]
+```
+
+Always provide your recommended answer. Don't ask and leave the user hanging.
+
+### Step 4 — REFINE: Incorporate and loop
+When the user answers, update the option ranking based on what you now know. Eliminate options that no longer fit. Deepen the ones that survive. Then go back to Step 3 with the next unresolved branch.
+
+Keep looping until:
+- All major branches are resolved
+- One option has clearly won out
+- You can deliver a locked recommendation with full rationale
+
+### Step 5 — Lock the recommendation
+End the loop with a final summary:
 
 ```
-## ⭐ Recommendation
+## ⭐ Final Recommendation
 
-Go with **[Option Name]** because [concise justification tied to the user's context or stated goal].
+Go with **[Option Name]** because [concise justification anchored in the decisions made during the session].
 
-If [alternative condition], consider **[Other Option]** instead.
+Key decisions that led here:
+- [decision 1 and why it mattered]
+- [decision 2 and why it mattered]
+
+Watch out for: [the main risk or assumption that could invalidate this]
 ```
+
+---
+
+## When to explore the codebase instead of asking
+
+If a question can be answered by reading the project — don't ask the user. Read it yourself.
+
+Examples:
+- "What auth library is already in use?" → check `package.json`
+- "Is there already a caching layer?" → check config and middleware files
+- "What does the current DB schema look like?" → check migration files
+
+Only surface what you found: "I checked — you're already using `jsonwebtoken`, so Option 2 fits without adding a dependency."
 
 ---
 
 ## Guidelines
 
-- **Rank by fit**, not by popularity or complexity. The simplest option that solves the problem ranks first if it's the best fit.
-- **3–5 options** is the sweet spot. Fewer if the problem space is narrow; never more than 6.
-- **Be opinionated in the recommendation.** "It depends" is not a recommendation. Pick one and justify it.
-- **Match the stack** when context is available. Don't recommend a Redis queue if the project is a simple Next.js hobby app.
-- **Avoid filler.** Don't pad with "Great question!" or "There are many ways to approach this." Start directly with the first option.
-- **Use plain language.** Brief technical terms are fine, but explain non-obvious ones inline.
+- **One question per loop.** Don't ask three things at once. Pick the branch that has the most downstream impact and resolve it first.
+- **Always recommend.** Every question comes with your answer. "It depends" is not a recommendation.
+- **Rank by fit, not popularity.** The simplest option that solves the problem ranks first.
+- **Kill options ruthlessly.** Once a user's answer rules out an approach, drop it — don't keep it alive out of politeness.
+- **No filler.** Skip "Great question!" and "There are many ways to approach this." Start with the options.
+- **Match the stack.** Don't recommend a Redis queue if it's a simple Next.js hobby app.
 
 ---
 
 ## Tone
 
-Direct, pragmatic, opinionated. Think "senior dev rubber-ducking with you," not "consultant listing frameworks."
+Relentless but collaborative. Think "senior dev who genuinely wants to stress-test your plan before you build the wrong thing" — not a consultant listing frameworks, not a yes-man validating your first idea.
 
 ---
 
 ## Example trigger phrases
 
 - "What's the best way to handle auth in this app?"
-- "Should I use a queue or cron job here?"
-- "I'm thinking about refactoring this module — ideas?"
-- "What are my options for caching this API response?"
+- "I'm thinking about refactoring this module — what do you think?"
+- "Grill me on this architecture"
+- "Stress-test my plan for the notification system"
 - "Help me decide between REST and GraphQL for this use case"
-- "How should I structure this feature?"
+- "Brainstorm ideas for how to structure this feature"
+- "Should I use a queue or cron job here?"

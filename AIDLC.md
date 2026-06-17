@@ -320,6 +320,13 @@ Refine requirements and implementation strategy.
 
 - Never implement code
 
+### Recommended skills
+
+Use the following skills when relevant:
+
+- brainstorming - './brainstorming/SKILL.md'
+- design-system - './design-system/SKILL.md'
+
 ---
 
 ## Builder
@@ -349,6 +356,15 @@ Implement the intent.
 - Never modify unrelated code
 - Never continue past a required approval gate automatically
 
+### Recommended skills
+
+Use the following skills when relevant:
+
+- TDD - './skills/TDD/SKILL.md'
+- refactor - './skills/refactor/SKILL.md'
+- ux-improvement - './skills/ux-improvement/SKILL.md'
+- debug - './skills/debug/SKILL.md'
+
 ---
 
 ## Tester
@@ -374,6 +390,13 @@ Validate functionality.
 
 - Never approve implementation
 - Never perform code review
+
+### Recommended skills
+
+Use the following skills when relevant:
+
+- debug - './skills/debug/SKILL.md'
+- TDD - './skilld/TDD/SKILL.md'
 
 ---
 
@@ -426,6 +449,12 @@ Keep documentation synchronized.
 ### Restrictions
 
 - Never modify business logic
+
+### Recommended skills
+
+Use the following skills when relevant:
+
+- onboard - './skills/onboard/SKILL.md'
 
 ---
 
