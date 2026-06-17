@@ -62,6 +62,14 @@ function createConfiguredProject() {
   }
 }
 
+function setCurrentBranch(branch: string) {
+  writeFile(join(workspace, ".git", "HEAD"), `ref: refs/heads/${branch}\n`);
+}
+
+function createBranch(branch: string) {
+  writeFile(join(workspace, ".git", "refs", "heads", ...branch.split("/")), "abc123\n");
+}
+
 function writeIntent(status: string, options: { omitCommitsHeading?: boolean } = {}) {
   writeFile(
     join(workspace, "intents", "INTENT-001.md"),
@@ -144,6 +152,7 @@ describe("AI-DLC CLI", () => {
 
   test("transition blocks invalid lifecycle jumps", () => {
     createConfiguredProject();
+    setCurrentBranch("intent/001-test-intent");
     writeIntent("in_development");
 
     const result = runAidlc(["transition", "INTENT-001", "done"]);
@@ -154,6 +163,7 @@ describe("AI-DLC CLI", () => {
 
   test("transition updates status and reports approval gates", () => {
     createConfiguredProject();
+    setCurrentBranch("intent/001-test-intent");
     writeIntent("ready_for_testing");
 
     const result = runAidlc(["transition", "INTENT-001", "review"]);
@@ -169,6 +179,7 @@ describe("AI-DLC CLI", () => {
 
   test("transition to done reads review notes at end of file", () => {
     createConfiguredProject();
+    setCurrentBranch("intent/001-test-intent");
     writeIntent("approved", { omitCommitsHeading: true });
 
     const result = runAidlc(["transition", "INTENT-001", "done"]);
@@ -179,5 +190,43 @@ describe("AI-DLC CLI", () => {
 
     expect(result.exitCode).toBe(0);
     expect(updatedIntent).toContain("status: done");
+  });
+
+  test("branch reports when current branch matches the intent branch", () => {
+    createConfiguredProject();
+    setCurrentBranch("intent/001-test-intent");
+    createBranch("intent/001-test-intent");
+    writeIntent("context_ready");
+
+    const result = runAidlc(["branch", "INTENT-001"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(output(result)).toContain("Intent branch exists: yes");
+    expect(output(result)).toContain("Branch status: ok");
+  });
+
+  test("transition to development suggests switching to an existing branch", () => {
+    createConfiguredProject();
+    setCurrentBranch("main");
+    createBranch("intent/001-test-intent");
+    writeIntent("context_ready");
+
+    const result = runAidlc(["transition", "INTENT-001", "in_development"]);
+
+    expect(result.exitCode).toBe(1);
+    expect(output(result)).toContain("Intent branch mismatch");
+    expect(output(result)).toContain("git switch intent/001-test-intent");
+  });
+
+  test("transition to development suggests creating a missing branch", () => {
+    createConfiguredProject();
+    setCurrentBranch("main");
+    writeIntent("context_ready");
+
+    const result = runAidlc(["transition", "INTENT-001", "in_development"]);
+
+    expect(result.exitCode).toBe(1);
+    expect(output(result)).toContain("Intent branch mismatch");
+    expect(output(result)).toContain("git switch -c intent/001-test-intent");
   });
 });

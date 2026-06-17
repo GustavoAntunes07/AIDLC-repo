@@ -5,7 +5,7 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs";
-import { basename, join, normalize } from "node:path";
+import { basename, dirname, join, normalize, resolve } from "node:path";
 
 type IntentStatus =
   | "backlog"
@@ -29,6 +29,7 @@ type AidlcConfig = {
   defaultBranch: string;
   developmentBranch: string;
   intentBranchPrefix: string;
+  enforceIntentBranch: boolean;
 };
 
 const INTENTS_DIR = "intents";
@@ -102,6 +103,7 @@ const DEFAULT_CONFIG: AidlcConfig = {
   defaultBranch: "main",
   developmentBranch: "dev",
   intentBranchPrefix: "intent/",
+  enforceIntentBranch: true,
 };
 
 const DEFAULT_CONFIG_YAML = `version: 1
@@ -111,6 +113,7 @@ branches:
   default: main
   development: dev
   intent_prefix: intent/
+  enforce_intent_branch: true
 
 review:
   max_cycles: 3
@@ -242,6 +245,99 @@ function allAcceptanceCriteriaChecked(content: string) {
   return criteria.length > 0 && criteria.every((item) => /^- \[[xX]\]/.test(item));
 }
 
+function getGitHeadPath() {
+  const dotGitPath = ".git";
+  const headPath = join(dotGitPath, "HEAD");
+
+  if (existsSync(headPath)) {
+    return headPath;
+  }
+
+  if (!existsSync(dotGitPath)) {
+    return undefined;
+  }
+
+  const dotGitContent = read(dotGitPath).trim();
+  const gitDir = dotGitContent.match(/^gitdir:\s*(.+)$/)?.[1]?.trim();
+
+  if (!gitDir) {
+    return undefined;
+  }
+
+  const resolvedGitDir = resolve(dirname(dotGitPath), gitDir);
+  return join(resolvedGitDir, "HEAD");
+}
+
+function getCurrentGitBranch() {
+  const headPath = getGitHeadPath();
+
+  if (!headPath || !existsSync(headPath)) {
+    return undefined;
+  }
+
+  const head = read(headPath).trim();
+  const branch = head.match(/^ref:\s*refs\/heads\/(.+)$/)?.[1]?.trim();
+
+  return branch || head;
+}
+
+function getGitDirPath() {
+  const dotGitPath = ".git";
+
+  if (!existsSync(dotGitPath)) {
+    return undefined;
+  }
+
+  const headPath = join(dotGitPath, "HEAD");
+
+  if (existsSync(headPath)) {
+    return dotGitPath;
+  }
+
+  const dotGitContent = read(dotGitPath).trim();
+  const gitDir = dotGitContent.match(/^gitdir:\s*(.+)$/)?.[1]?.trim();
+
+  if (!gitDir) {
+    return undefined;
+  }
+
+  return resolve(dirname(dotGitPath), gitDir);
+}
+
+function branchExists(branch: string) {
+  const gitDir = getGitDirPath();
+
+  if (!gitDir) {
+    return false;
+  }
+
+  const looseRefPath = join(gitDir, "refs", "heads", ...branch.split("/"));
+
+  if (existsSync(looseRefPath)) {
+    return true;
+  }
+
+  const packedRefsPath = join(gitDir, "packed-refs");
+
+  if (!existsSync(packedRefsPath)) {
+    return false;
+  }
+
+  return read(packedRefsPath)
+    .split(/\r?\n/)
+    .some((line) => line.endsWith(` refs/heads/${branch}`));
+}
+
+function getRequiredIntentBranch(content: string) {
+  const branch = getField(content, "branch");
+
+  if (!branch || branch === "null") {
+    return undefined;
+  }
+
+  return branch;
+}
+
 function createState() {
   ensureDir(AIDLC_DIR);
 
@@ -364,6 +460,9 @@ function parseConfigYaml(content: string): AidlcConfig {
     if (fullPath === "branches.default") config.defaultBranch = value;
     if (fullPath === "branches.development") config.developmentBranch = value;
     if (fullPath === "branches.intent_prefix") config.intentBranchPrefix = value;
+    if (fullPath === "branches.enforce_intent_branch") {
+      config.enforceIntentBranch = value === "true";
+    }
     if (fullPath === "review.max_cycles") config.maxReviewCycles = Number(value);
     if (fullPath === "lifecycle.initial_status" && isIntentStatus(value)) {
       config.initialStatus = value;
@@ -717,6 +816,37 @@ function guardTransition(content: string, to: IntentStatus) {
   return errors;
 }
 
+function guardIntentBranch(content: string, config: AidlcConfig, to: IntentStatus) {
+  if (!config.enforceIntentBranch || to !== "in_development") {
+    return [];
+  }
+
+  const requiredBranch = getRequiredIntentBranch(content);
+  const currentBranch = getCurrentGitBranch();
+  const errors: string[] = [];
+
+  if (!requiredBranch) {
+    errors.push("Intent branch enforcement requires a branch field.");
+  }
+
+  if (!currentBranch) {
+    errors.push("Unable to determine the current Git branch.");
+  }
+
+  if (requiredBranch && currentBranch && currentBranch !== requiredBranch) {
+    const command = branchExists(requiredBranch)
+      ? `git switch ${requiredBranch}`
+      : `git switch -c ${requiredBranch}`;
+
+    errors.push(
+      `Intent branch mismatch. Current branch is ${currentBranch}; required branch is ${requiredBranch}.`,
+    );
+    errors.push(`Run: ${command}`);
+  }
+
+  return errors;
+}
+
 function transitionIntent(identifier: string | undefined, target: string | undefined) {
   if (!identifier || !target) {
     console.error("Usage: bun aidlc transition <intent-id|file> <target-status>");
@@ -755,6 +885,7 @@ function transitionIntent(identifier: string | undefined, target: string | undef
   }
 
   const guardErrors = guardTransition(content, target);
+  guardErrors.push(...guardIntentBranch(content, config, target));
 
   if (guardErrors.length > 0) {
     console.error(`\nTransition blocked: ${currentStatus} -> ${target}\n`);
@@ -777,6 +908,55 @@ function transitionIntent(identifier: string | undefined, target: string | undef
       `Approval gate reached for governance profile: ${config.governanceProfile}`,
     );
   }
+}
+
+function checkIntentBranch(identifier: string | undefined) {
+  if (!identifier) {
+    console.error("Usage: bun aidlc branch <intent-id|file>");
+    process.exit(1);
+  }
+
+  const file = findIntent(identifier);
+
+  if (!file) {
+    console.error(`Intent not found: ${identifier}`);
+    process.exit(1);
+  }
+
+  const content = read(file);
+  const requiredBranch = getRequiredIntentBranch(content);
+  const currentBranch = getCurrentGitBranch();
+
+  if (!requiredBranch) {
+    console.error(`${identifier} does not define a branch.`);
+    process.exit(1);
+  }
+
+  console.log(`Intent branch: ${requiredBranch}`);
+  console.log(`Intent branch exists: ${branchExists(requiredBranch) ? "yes" : "no"}`);
+
+  if (!currentBranch) {
+    console.log("Current branch: unknown");
+    const command = branchExists(requiredBranch)
+      ? `git switch ${requiredBranch}`
+      : `git switch -c ${requiredBranch}`;
+    console.log(`Run: ${command}`);
+    process.exit(1);
+  }
+
+  console.log(`Current branch: ${currentBranch}`);
+
+  if (currentBranch !== requiredBranch) {
+    const command = branchExists(requiredBranch)
+      ? `git switch ${requiredBranch}`
+      : `git switch -c ${requiredBranch}`;
+
+    console.log("Branch status: mismatch");
+    console.log(`Run: ${command}`);
+    process.exit(1);
+  }
+
+  console.log("Branch status: ok");
 }
 
 function showConfig() {
@@ -807,6 +987,7 @@ Usage:
   bun scripts/aidlc.ts next
   bun scripts/aidlc.ts validate
   bun scripts/aidlc.ts config
+  bun scripts/aidlc.ts branch <intent-id|file>
   bun scripts/aidlc.ts transition <intent-id|file> <target-status>
   bun scripts/aidlc.ts doctor
 `);
@@ -845,6 +1026,10 @@ switch (command) {
 
   case "config":
     showConfig();
+    break;
+
+  case "branch":
+    checkIntentBranch(args[0]);
     break;
 
   case "transition":

@@ -9,6 +9,7 @@
     "aidlc:next": "bun scripts/aidlc.ts next",
     "aidlc:validate": "bun scripts/aidlc.ts validate",
     "aidlc:config": "bun scripts/aidlc.ts config",
+    "aidlc:branch": "bun scripts/aidlc.ts branch",
     "aidlc:transition": "bun scripts/aidlc.ts transition",
     "aidlc:doctor": "bun scripts/aidlc.ts doctor"
   },
