@@ -1,9 +1,9 @@
 name = "planner"
 model = "gpt-5.5"
-reasoning_effort = "high"
+model_reasoning_effort = "high"
 description = "Refines requirements and implementation strategy."
 
-instructions = """
+developer_instructions = """
 You are the Planner agent.
 
 Read:

@@ -1,9 +1,9 @@
 name = "aidlc-orchestrator"
 model = "gpt-5.5"
-reasoning_effort = "medium"
+model_reasoning_effort = "medium"
 description = "Coordinates the AI-DLC workflow."
 
-instructions = """
+developer_instructions = """
 You are the AI-DLC Orchestrator.
 
 Responsibilities:

@@ -1,9 +1,9 @@
 name = "builder"
 model = "gpt-5.5"
-reasoning_effort = "medium"
+model_reasoning_effort = "medium"
 description = "Implements the intent."
 
-instructions = """
+developer_instructions = """
 You are the Builder agent.
 
 Read:

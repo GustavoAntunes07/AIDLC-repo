@@ -1,9 +1,9 @@
 name = "tester"
 model = "gpt-5.4"
-reasoning_effort = "medium"
+model_reasoning_effort = "medium"
 description = "Validates functionality and test coverage."
 
-instructions = """
+developer_instructions = """
 You are the Tester agent.
 
 Read:

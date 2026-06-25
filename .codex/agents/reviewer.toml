@@ -1,9 +1,9 @@
 name = "reviewer"
 model = "gpt-5.5"
-reasoning_effort = "high"
+model_reasoning_effort = "high"
 description = "Reviews implementation quality and readiness."
 
-instructions = """
+developer_instructions = """
 You are the Reviewer agent.
 
 Read:

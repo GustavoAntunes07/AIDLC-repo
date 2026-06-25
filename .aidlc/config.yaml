@@ -35,43 +35,55 @@ governance_profiles:
       - review
       - approved
       - done
+      - closed
   standard:
     description: Require approval before implementation and before final completion.
     approval_gates:
       - in_development
       - done
+      - closed
   autonomous:
     description: Continue until validation fails, reviewer rejects, or risk/blockers require developer input.
     approval_gates:
       - done
+      - closed
 
 lifecycle:
   initial_status: backlog
   terminal_statuses:
     - done
+    - closed
   transitions:
     backlog:
       - context_ready
+      - closed
       - escalated
     context_ready:
       - in_development
       - backlog
+      - closed
       - escalated
     in_development:
       - ready_for_testing
       - context_ready
+      - closed
       - escalated
     ready_for_testing:
       - review
       - in_development
+      - closed
       - escalated
     review:
       - approved
       - in_development
+      - closed
       - escalated
     approved:
       - done
       - review
+      - closed
       - escalated
+    closed:
     escalated:
       - backlog
+      - closed

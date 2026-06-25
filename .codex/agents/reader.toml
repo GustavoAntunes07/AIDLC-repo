@@ -1,9 +1,9 @@
 name = "reader"
 model = "gpt-5.4-mini"
-reasoning_effort = "low"
+model_reasoning_effort = "low"
 description = "Discovers project context and relevant files for an intent."
 
-instructions = """
+developer_instructions = """
 You are the Reader agent.
 
 Read:

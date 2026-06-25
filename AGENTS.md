@@ -8,8 +8,10 @@ This repository uses an AI-assisted development lifecycle.
 - Never push without explicit user approval.
 - Always work from an intent file for implementation work.
 - Always update the intent status after each completed stage.
+- Always create a new branch for the intent before make any changes in code.
 - Before moving an intent to `in_development`, verify the current branch with `bun aidlc:branch <intent-id>`.
 - Use `bun aidlc transition <intent-id> <status>` for lifecycle status changes.
+- Use `bun aidlc close <intent-id> [reason]` for intents that should be terminal without becoming `done`.
 - Always run project validation commands before marking work as complete.
 
 ## Out-Of-Lifecycle Questions
@@ -56,6 +58,7 @@ It defines:
 - Active governance profile
 - Required agents
 - Lifecycle transitions
+- Terminal `done` and `closed` statuses
 - Approval gates
 - Validation commands
 - Branch enforcement

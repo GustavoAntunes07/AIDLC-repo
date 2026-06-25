@@ -11,6 +11,7 @@
     "aidlc:config": "bun scripts/aidlc.ts config",
     "aidlc:branch": "bun scripts/aidlc.ts branch",
     "aidlc:transition": "bun scripts/aidlc.ts transition",
+    "aidlc:close": "bun scripts/aidlc.ts close",
     "aidlc:doctor": "bun scripts/aidlc.ts doctor"
   },
   "devDependencies": {

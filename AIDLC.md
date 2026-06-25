@@ -21,15 +21,14 @@ A project is considered configured when:
 
 ## Description
 
-AI-DLC is a repository template and workflow contract for using Codex-style coding agents in a controlled development lifecycle. It keeps agent work tied to explicit intents, separates planning from implementation and review, and provides a CLI that validates setup, intent structure, governance rules, and lifecycle transitions.
+AI-DLC is a repository workflow contract for Codex-style coding agents. It keeps implementation work tied to explicit intents, separates planning from implementation and review, and uses a CLI to validate setup, intent structure, governance rules, branch enforcement, and lifecycle transitions.
 
-Primary users are developers who want AI agents to work inside a repeatable process instead of ad hoc chat sessions.
+Primary users are developers and teams who want AI agents to work inside a repeatable process instead of ad hoc chat sessions.
 
 ## Tech Stack
 
 - Bun
 - TypeScript
-- Markdown
 - TOML agent configuration
 - YAML lifecycle configuration
 
@@ -53,6 +52,8 @@ bun aidlc:check
 bun aidlc:new "Add login page"
 ```
 
+New intents use short base36 IDs, such as `INTENT-k9f2`, while older intent IDs remain valid.
+
 ### Status
 
 ```bash
@@ -65,11 +66,21 @@ bun aidlc:status
 bun aidlc:branch INTENT-001
 ```
 
+### Close Intent
+
+```bash
+bun aidlc close INTENT-k9f2 duplicate
+```
+
+Use `closed` for intents that should remain in project history but should not continue through implementation.
+
 ### Doctor
 
 ```bash
 bun aidlc:doctor
 ```
+
+Application commands will be added after the desktop app is scaffolded.
 
 ---
 
@@ -97,7 +108,7 @@ intent/<intent-id>-<short-description>
 Example:
 
 ```txt
-intent/001-add-login-page
+intent/k9f2-add-login-page
 ```
 
 Unless explicitly requested by the developer, implementation should not occur directly in the default development branch.
@@ -214,6 +225,15 @@ approved
 done
 ```
 
+Any active intent may also be closed when it is abandoned, duplicated, superseded, stale, or invalid:
+
+```txt
+backlog/context_ready/in_development/ready_for_testing/review/approved/escalated
+    |
+    v
+closed
+```
+
 Rejected intents return to:
 
 ```txt
@@ -248,6 +268,12 @@ or:
 bun scripts/aidlc.ts transition INTENT-001 context_ready
 ```
 
+To close an intent without satisfying the Definition of Done, use:
+
+```bash
+bun scripts/aidlc.ts close INTENT-k9f2 duplicate
+```
+
 ---
 
 # Definition of Ready
@@ -274,6 +300,22 @@ An intent may only be marked as `done` when:
 - Review Notes record the approval
 - Documentation was updated if necessary
 - Developer explicitly approved completion
+
+---
+
+# Definition of Closed
+
+An intent may be marked as `closed` when the work should not continue but should remain visible in repository history.
+
+Common close reasons:
+
+- `stale`
+- `duplicate`
+- `abandoned`
+- `superseded`
+- `invalid`
+
+Closed intents are terminal records. They do not need to satisfy the Definition of Done, and they should not be selected by `aidlc next`.
 
 ---
 
@@ -437,7 +479,7 @@ Validate functionality.
 Use the following skills when relevant:
 
 - debug - './skills/debug/SKILL.md'
-- TDD - './skilld/TDD/SKILL.md'
+- TDD - './skills/TDD/SKILL.md'
 
 ---
 
@@ -563,12 +605,12 @@ Example:
 
 ```md
 ---
-id: INTENT-001
+id: INTENT-k9f2
 title: Add login page
 status: backlog
 story_points: 3
 retry_count: 0
-branch: intent/001-add-login-page
+branch: intent/k9f2-add-login-page
 ---
 
 # Description

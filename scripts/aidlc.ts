@@ -15,6 +15,7 @@ type IntentStatus =
   | "review"
   | "approved"
   | "done"
+  | "closed"
   | "escalated";
 
 type AidlcConfig = {
@@ -58,18 +59,20 @@ const VALID_STATUSES: IntentStatus[] = [
   "review",
   "approved",
   "done",
+  "closed",
   "escalated",
 ];
 
 const DEFAULT_TRANSITIONS: Record<IntentStatus, IntentStatus[]> = {
-  backlog: ["context_ready", "escalated"],
-  context_ready: ["in_development", "backlog", "escalated"],
-  in_development: ["ready_for_testing", "context_ready", "escalated"],
-  ready_for_testing: ["review", "in_development", "escalated"],
-  review: ["approved", "in_development", "escalated"],
-  approved: ["done", "review", "escalated"],
+  backlog: ["context_ready", "closed", "escalated"],
+  context_ready: ["in_development", "backlog", "closed", "escalated"],
+  in_development: ["ready_for_testing", "context_ready", "closed", "escalated"],
+  ready_for_testing: ["review", "in_development", "closed", "escalated"],
+  review: ["approved", "in_development", "closed", "escalated"],
+  approved: ["done", "review", "closed", "escalated"],
   done: [],
-  escalated: ["backlog"],
+  closed: [],
+  escalated: ["backlog", "closed"],
 };
 
 const DEFAULT_CONFIG: AidlcConfig = {
@@ -92,12 +95,13 @@ const DEFAULT_CONFIG: AidlcConfig = {
       "review",
       "approved",
       "done",
+      "closed",
     ],
-    standard: ["in_development", "done"],
-    autonomous: ["done"],
+    standard: ["in_development", "done", "closed"],
+    autonomous: ["done", "closed"],
   },
   transitions: DEFAULT_TRANSITIONS,
-  terminalStatuses: ["done"],
+  terminalStatuses: ["done", "closed"],
   initialStatus: "backlog",
   maxReviewCycles: 3,
   defaultBranch: "main",
@@ -143,46 +147,58 @@ governance_profiles:
       - review
       - approved
       - done
+      - closed
   standard:
     description: Require approval before implementation and before final completion.
     approval_gates:
       - in_development
       - done
+      - closed
   autonomous:
     description: Continue until validation fails, reviewer rejects, or risk/blockers require developer input.
     approval_gates:
       - done
+      - closed
 
 lifecycle:
   initial_status: backlog
   terminal_statuses:
     - done
+    - closed
   transitions:
     backlog:
       - context_ready
+      - closed
       - escalated
     context_ready:
       - in_development
       - backlog
+      - closed
       - escalated
     in_development:
       - ready_for_testing
       - context_ready
+      - closed
       - escalated
     ready_for_testing:
       - review
       - in_development
+      - closed
       - escalated
     review:
       - approved
       - in_development
+      - closed
       - escalated
     approved:
       - done
       - review
+      - closed
       - escalated
+    closed:
     escalated:
       - backlog
+      - closed
 `;
 
 function ensureDir(path: string) {
@@ -211,6 +227,22 @@ function setField(content: string, field: string, value: string) {
   }
 
   return content.replace(pattern, `${field}: ${value}`);
+}
+
+function upsertField(content: string, field: string, value: string) {
+  const pattern = new RegExp(`^${field}:\\s*.*$`, "m");
+
+  if (pattern.test(content)) {
+    return content.replace(pattern, `${field}: ${value}`);
+  }
+
+  const statusPattern = /^status:\s*.*$/m;
+
+  if (statusPattern.test(content)) {
+    return content.replace(statusPattern, (line) => `${line}\n${field}: ${value}`);
+  }
+
+  throw new Error(`Missing field: status`);
 }
 
 function isIntentStatus(value: string | undefined): value is IntentStatus {
@@ -405,6 +437,7 @@ function parseConfigYaml(content: string): AidlcConfig {
     review: [],
     approved: [],
     done: [],
+    closed: [],
     escalated: [],
   };
   config.terminalStatuses = [];
@@ -594,15 +627,15 @@ function checkSetup() {
 function createIntent(title: string) {
   ensureDir(INTENTS_DIR);
 
-  const numericId = String(Date.now()).slice(-6);
-  const id = `INTENT-${numericId}`;
+  const shortId = createShortIntentId();
+  const id = `INTENT-${shortId}`;
   const slug = title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
   const config = loadConfig();
 
-  const branch = `${config.intentBranchPrefix}${numericId}-${slug || "untitled"}`;
+  const branch = `${config.intentBranchPrefix}${shortId}-${slug || "untitled"}`;
   const filePath = join(INTENTS_DIR, `${id}.md`);
 
   const content = `---
@@ -636,6 +669,19 @@ ${title}
   write(filePath, content);
 
   console.log(`Created ${filePath}`);
+}
+
+function createShortIntentId() {
+  const baseId = Date.now().toString(36).slice(-4).padStart(4, "0");
+  let candidate = baseId;
+  let attempt = 0;
+
+  while (existsSync(join(INTENTS_DIR, `INTENT-${candidate}.md`))) {
+    attempt += 1;
+    candidate = `${baseId}${attempt.toString(36)}`;
+  }
+
+  return candidate;
 }
 
 function status() {
@@ -910,6 +956,45 @@ function transitionIntent(identifier: string | undefined, target: string | undef
   }
 }
 
+function closeIntent(identifier: string | undefined, reasonParts: string[]) {
+  if (!identifier) {
+    console.error("Usage: bun aidlc close <intent-id|file> [reason]");
+    process.exit(1);
+  }
+
+  const file = findIntent(identifier);
+
+  if (!file) {
+    console.error(`Intent not found: ${identifier}`);
+    process.exit(1);
+  }
+
+  const config = loadConfig();
+  const content = read(file);
+  const currentStatus = getField(content, "status");
+
+  if (!isIntentStatus(currentStatus)) {
+    console.error(`${file} has invalid current status: ${currentStatus}`);
+    process.exit(1);
+  }
+
+  if (currentStatus !== "closed" && config.terminalStatuses.includes(currentStatus)) {
+    console.error(`Cannot close terminal intent: ${currentStatus}`);
+    process.exit(1);
+  }
+
+  const reason = reasonParts.join(" ").replace(/\r?\n/g, " ").trim();
+  let updatedContent = setField(content, "status", "closed");
+
+  if (reason) {
+    updatedContent = upsertField(updatedContent, "closed_reason", reason);
+  }
+
+  write(file, updatedContent);
+
+  console.log(`Closed ${identifier}${reason ? `: ${reason}` : ""}`);
+}
+
 function checkIntentBranch(identifier: string | undefined) {
   if (!identifier) {
     console.error("Usage: bun aidlc branch <intent-id|file>");
@@ -989,6 +1074,7 @@ Usage:
   bun scripts/aidlc.ts config
   bun scripts/aidlc.ts branch <intent-id|file>
   bun scripts/aidlc.ts transition <intent-id|file> <target-status>
+  bun scripts/aidlc.ts close <intent-id|file> [reason]
   bun scripts/aidlc.ts doctor
 `);
 }
@@ -1034,6 +1120,10 @@ switch (command) {
 
   case "transition":
     transitionIntent(args[0], args[1]);
+    break;
+
+  case "close":
+    closeIntent(args[0], args.slice(1));
     break;
 
   case "doctor":

@@ -1,9 +1,9 @@
 name = "documenter"
 model = "gpt-5.4-mini"
-reasoning_effort = "low"
+model_reasoning_effort = "low"
 description = "Keeps documentation synchronized with implementation."
 
-instructions = """
+developer_instructions = """
 You are the Documenter agent.
 
 Read:
