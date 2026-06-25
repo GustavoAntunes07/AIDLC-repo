@@ -29,7 +29,9 @@ Primary users are developers and teams who want AI agents to work inside a repea
 
 - Bun
 - TypeScript
-- TOML agent configuration
+- Markdown
+- TOML agent configuration (Codex)
+- Markdown agent configuration (Claude Code)
 - YAML lifecycle configuration
 
 ## Main Commands
@@ -145,7 +147,8 @@ If a read-only discussion turns into implementation work, create or select an in
 
 - Global project rules: `AIDLC.md`
 - Runtime lifecycle configuration: `.aidlc/config.yaml`
-- Agent behavior: `.codex/agents/` and `skills/`
+- Agent behavior (Codex): `.codex/agents/` and `skills/`
+- Agent behavior (Claude Code): `.claude/agents/` and `skills/`
 - Unit of work: `intents/INTENT-*.md`
 - Architecture docs: `docs/`
 
@@ -562,7 +565,9 @@ The config defines:
 
 ---
 
-# Codex Model And Reasoning Verification
+# Model And Reasoning Verification
+
+## Codex
 
 Codex model defaults belong in `~/.codex/config.toml`. Trusted repositories can also provide project-scoped overrides in `.codex/config.toml`.
 
@@ -590,6 +595,25 @@ codex --config model_reasoning_effort='"high"'
 ```
 
 For runtime evidence, enable Codex logs or OpenTelemetry. Conversation start events include model and reasoning settings, which are stronger evidence than reading config files alone.
+
+## Claude Code
+
+Claude Code model defaults are set per session or via the `--model` flag.
+
+Available models (as of mid-2026):
+
+- `claude-fable-5` — Fable 5 (most capable)
+- `claude-opus-4-8` — Opus 4.8
+- `claude-sonnet-4-6` — Sonnet 4.6
+- `claude-haiku-4-5-20251001` — Haiku 4.5
+
+Agent-level model overrides are set in the `model` frontmatter field of each `.claude/agents/*.md` file. Agents without a `model` field inherit the session model.
+
+To verify the active model, check the Claude Code session header or run:
+
+```bash
+claude --version
+```
 
 ---
 
@@ -640,7 +664,8 @@ Add user authentication with email and password.
 
 ```txt
 .
-|-- AGENTS.md
+|-- AGENTS.md          # Codex context
+|-- CLAUDE.md          # Claude Code context
 |-- AIDLC.md
 |-- intents/
 |-- docs/
@@ -649,7 +674,9 @@ Add user authentication with email and password.
 |   |-- config.yaml
 |   `-- state.json
 |-- .codex/
-|   `-- agents/
+|   `-- agents/        # Codex agent definitions (.toml)
+|-- .claude/
+|   `-- agents/        # Claude Code agent definitions (.md)
 `-- scripts/
 ```
 
@@ -657,22 +684,22 @@ Add user authentication with email and password.
 
 # Agent Configuration
 
-Agent-specific behavior belongs in:
+Agent-specific behavior belongs in the directory matching the active coding assistant.
+
+**Codex:**
 
 ```txt
 .codex/agents/
 ```
 
-Expected agent files:
+Expected files: `aidlc-orchestrator.toml`, `reader.toml`, `planner.toml`, `builder.toml`, `tester.toml`, `reviewer.toml`, `documenter.toml`
+
+**Claude Code:**
 
 ```txt
-aidlc-orchestrator.toml
-reader.toml
-planner.toml
-builder.toml
-tester.toml
-reviewer.toml
-documenter.toml
+.claude/agents/
 ```
+
+Expected files: `aidlc-orchestrator.md`, `reader.md`, `planner.md`, `builder.md`, `tester.md`, `reviewer.md`, `documenter.md`
 
 Agent files define responsibilities. Workflow rules belong in `AIDLC.md` and executable workflow configuration belongs in `.aidlc/config.yaml`.
