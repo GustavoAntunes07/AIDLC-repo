@@ -567,6 +567,22 @@ The config defines:
 
 # Model And Reasoning Verification
 
+## Codex agent model allocation
+
+Agent-level assignments live in `.codex/agents/*.toml`:
+
+| Agent | Model | Use |
+| --- | --- | --- |
+| `aidlc-orchestrator` | `gpt-6-luna` | Workflow coordination |
+| `reader` | `gpt-6-luna` | Repository context gathering |
+| `planner` | `gpt-6.1-sol` | Requirements and implementation planning |
+| `builder` | `gpt-6.1-sol` | Implementation |
+| `tester` | `gpt-6-luna` | Validation |
+| `reviewer` | `gpt-6-astra` | Infrequent, high-value review |
+| `documenter` | `gpt-6-luna` | Documentation updates |
+
+GPT-6 Astra is reserved for review because it is the higher-cost model. The other agents use Luna for lightweight work and Sol for planning and implementation.
+
 ## Codex
 
 Codex model defaults belong in `~/.codex/config.toml`. Trusted repositories can also provide project-scoped overrides in `.codex/config.toml`.
@@ -574,7 +590,7 @@ Codex model defaults belong in `~/.codex/config.toml`. Trusted repositories can 
 Common settings:
 
 ```toml
-model = "gpt-5.5"
+model = "gpt-6.1-sol"
 model_reasoning_effort = "high"
 ```
 
@@ -590,7 +606,7 @@ Configuration precedence, highest first:
 To verify intended configuration:
 
 ```bash
-codex --model gpt-5.5
+codex --model gpt-6.1-sol
 codex --config model_reasoning_effort='"high"'
 ```
 
