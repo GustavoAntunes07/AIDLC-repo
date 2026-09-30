@@ -1,5 +1,5 @@
 name = "tester"
-model = "gpt-5.4"
+model = "gpt-6-luna"
 model_reasoning_effort = "medium"
 description = "Validates functionality and test coverage."
 

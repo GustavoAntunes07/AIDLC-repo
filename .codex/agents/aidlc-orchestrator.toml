@@ -1,5 +1,5 @@
 name = "aidlc-orchestrator"
-model = "gpt-5.5"
+model = "gpt-6-luna"
 model_reasoning_effort = "medium"
 description = "Coordinates the AI-DLC workflow."
 

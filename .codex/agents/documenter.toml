@@ -1,5 +1,5 @@
 name = "documenter"
-model = "gpt-5.4-mini"
+model = "gpt-6-luna"
 model_reasoning_effort = "low"
 description = "Keeps documentation synchronized with implementation."
 
