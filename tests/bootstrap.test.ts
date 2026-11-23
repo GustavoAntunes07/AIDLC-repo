@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -262,7 +262,9 @@ describe("installable bootstrap", () => {
   });
   test("the npm tarball installs and runs outside the framework checkout", () => {
     const npmPath = Bun.which(process.platform === "win32" ? "npm.cmd" : "npm")!;
-    const npmCli = join(dirname(npmPath), "node_modules/npm/bin/npm-cli.js");
+    const npmCli = process.platform === "win32"
+      ? join(dirname(npmPath), "node_modules/npm/bin/npm-cli.js")
+      : realpathSync(npmPath);
     const npm = (args: string[], cwd: string) => spawnSync(node, [npmCli, ...args], { cwd, encoding: "utf8", env: { ...process.env, npm_config_cache: join(workspace, "cache") } });
     const packed = npm(["pack", "--ignore-scripts", "--json", "--pack-destination", workspace], repo);
     expect(packed.status).toBe(0);
