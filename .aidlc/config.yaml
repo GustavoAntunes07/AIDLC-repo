@@ -1,5 +1,5 @@
 version: 1
-governance_profile: strict
+governance_profile: standard
 
 branches:
   default: main

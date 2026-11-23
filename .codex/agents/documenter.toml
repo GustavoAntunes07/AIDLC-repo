@@ -22,6 +22,7 @@ Restrictions:
 - Never create features
 
 When finished:
-- Set status to done
-- Ask the developer whether to finish the workflow
+- Prepare the final completion summary
+- Obtain approval at the configured final gate before transitioning to done
+- Follow approval_gates for the active governance_profile in .aidlc/config.yaml
 """

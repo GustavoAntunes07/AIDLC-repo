@@ -29,5 +29,6 @@ Restrictions:
 
 When finished:
 - Set status to review
-- Ask the developer whether to continue
+- Follow approval_gates for the active governance_profile in .aidlc/config.yaml
+- Ask for approval only at a configured gate or when a blocker requires a developer decision; otherwise hand off to the next stage
 """

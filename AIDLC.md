@@ -160,6 +160,8 @@ When documentation and `.aidlc/config.yaml` disagree, the config controls CLI be
 
 Governance profiles define how often the workflow must stop for developer approval. The active profile is configured in `.aidlc/config.yaml`.
 
+This framework checkout currently uses `standard` by explicit developer request. Agent handoffs follow configured gates; they do not add unconditional per-stage confirmation. New installations select their own governance profile.
+
 ## strict
 
 Stops after every lifecycle stage. Use this for high-risk work, architecture changes, security-sensitive changes, or when onboarding a new workflow.
@@ -719,3 +721,12 @@ Expected files: `aidlc-orchestrator.toml`, `reader.toml`, `planner.toml`, `build
 Expected files: `aidlc-orchestrator.md`, `reader.md`, `planner.md`, `builder.md`, `tester.md`, `reviewer.md`, `documenter.md`
 
 Agent files define responsibilities. Workflow rules belong in `AIDLC.md` and executable workflow configuration belongs in `.aidlc/config.yaml`.
+
+
+---
+
+# Installable AIDLC Roadmap
+
+The [CLI and shared-core roadmap](docs/aidlc-cli-roadmap.md) defines the planned transition from repository template to an installable, updatable framework, including Task Observer and the Unity Mini preset.
+
+This is future product direction. The current CLI, intent schema, agent definitions and `.aidlc/config.yaml` remain the executable contract until their implementation intents are completed.
