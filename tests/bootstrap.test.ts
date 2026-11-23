@@ -281,6 +281,20 @@ describe("installable bootstrap", () => {
     expect(cli(["--version"], entry, project).text.trim()).toBe("0.2.0");
     expect(cli(["init"], entry, project).code).toBe(0);
     expect(cli(["doctor"], entry, project).code).toBe(0);
+    expect(cli(["intent", "new", "Packaged lifecycle"], entry, project).code).toBe(0);
+    const fullIntent = readdirSync(join(project, "intents"))[0];
+    expect(JSON.parse(cli(["intent", "show", fullIntent], entry, project).text).schema).toBe("full-v1");
+    expect(cli(["intent", "list"], entry, project)).toEqual(cli(["list"], entry, project));
+    // Config and intents remain user-owned; compact Core use does not convert full history.
+    const preserved = readFileSync(join(project, "intents", fullIntent), "utf8");
+    writeFileSync(join(project, ".aidlc/config.yaml"), "version: 1\nworkflow_preset: compact\ngovernance_profile: standard\n");
+    expect(cli(["intent", "new", "Packaged compact bug", "--type", "bug"], entry, project).code).toBe(0);
+    const compactIntent = readdirSync(join(project, "intents")).find(file => file !== fullIntent)!;
+    const compactRecord = JSON.parse(cli(["intent", "show", compactIntent], entry, project).text);
+    expect(compactRecord.schema).toBe("compact-v1");
+    expect(compactRecord.content).toContain("type: bug");
+    expect(readFileSync(join(project, "intents", fullIntent), "utf8")).toBe(preserved);
+    expect(cli(["doctor"], entry, project).code).toBe(0);
     expect(existsSync(join(install, "node_modules/.bin", process.platform === "win32" ? "aidlc.cmd" : "aidlc"))).toBe(true);
     const shim = npm(["exec", "--offline", "--", "aidlc", "--version"], install);
     expect(shim.status).toBe(0);

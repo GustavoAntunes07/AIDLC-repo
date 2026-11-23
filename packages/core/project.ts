@@ -1,36 +1,11 @@
-import { existsSync, lstatSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { configErrors, isIntentStatus, loadProjectConfig, type AidlcConfig } from "./config";
+import { configErrors, loadProjectConfig } from "./config";
+import { validateProjectIntents } from "./intents";
+export { field, section, validateProjectIntents } from "./intents";
 import { inspectInstallation } from "./installation";
 
 export type Diagnostic = { errors: string[]; warnings: string[] };
-export const field = (text: string, key: string) => text.match(new RegExp(`^${key}:\\s*(.*)$`, "m"))?.[1]?.trim();
-export function section(text: string, name: string): string {
-  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return text.match(new RegExp(`(?:^|\\r?\\n)# ${escaped}\\s*\\r?\\n([\\s\\S]*?)(?=\\r?\\n# |$)`))?.[1]?.trim() ?? "";
-}
-
-export function validateProjectIntents(root: string, config?: AidlcConfig): string[] {
-  const errors: string[] = [];
-  try {
-    config ??= loadProjectConfig(root);
-    const dir = join(root, "intents");
-    if (!existsSync(dir)) return ["Missing directory: intents"];
-    for (const file of readdirSync(dir).filter(f => f.endsWith(".md"))) {
-      const text = readFileSync(join(dir, file), "utf8");
-      for (const key of ["id", "title", "status", "story_points", "retry_count", "branch"]) {
-        if (!field(text, key)) errors.push(`${file} is missing field: ${key}`);
-      }
-      const status = field(text, "status");
-      if (status && !isIntentStatus(status)) errors.push(`${file} has invalid status: ${status}`);
-      const branch = field(text, "branch");
-      if (branch && branch !== "null" && !branch.startsWith(config.intentBranchPrefix)) errors.push(`${file} branch must start with ${config.intentBranchPrefix}`);
-      if (!section(text, "Description")) errors.push(`${file} is missing a Description section body`);
-      if (!/- \[[ xX]\] .+/.test(section(text, "Acceptance Criteria"))) errors.push(`${file} must define at least one acceptance criterion`);
-    }
-  } catch (error) { errors.push(String(error instanceof Error ? error.message : error)); }
-  return errors;
-}
 
 export function discoverProject(start: string): string {
   // Commands target exactly the supplied directory; never silently install into an ancestor.

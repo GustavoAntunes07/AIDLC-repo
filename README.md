@@ -30,7 +30,7 @@ Or target an explicit directory:
 aidlc --cwd "C:\projects\my game" init
 ```
 
-`init` targets exactly the current directory or `--cwd`, not an inferred parent repository. Governance defaults to `strict`. Supported governance choices are `strict`, `standard` and `autonomous`; only `default` and `codex` are supported as preset and harness in this bootstrap.
+`init` targets exactly the current directory or `--cwd`, not an inferred parent repository. Governance defaults to `strict`. Supported governance choices are `strict`, `standard` and `autonomous`; initialization still supports only the `default` preset and `codex` harness. The lifecycle Core also supports a generic compact intent preset for projects configured explicitly.
 
 ## Ownership and diagnostics
 
@@ -46,11 +46,29 @@ Initialization uses a project lock. On a preflight conflict, no project content 
 
 ## Commands and compatibility
 
-Commands include `init`, `config`, `doctor`, `update`, `migrate`, `rollback`, `--version` and `--help`. Existing `setup`, `check-setup`, `new`, `status`, `list`, `next`, `validate`, `branch`, `transition` and `close` remain available. The source compatibility entry point is still `bun scripts/aidlc.ts` and existing package scripts are preserved.
+Commands include `init`, `config`, `doctor`, `update`, `migrate`, `rollback`, `--version` and `--help`. Lifecycle commands are available in the modern `intent` family (`intent new`, `intent list`, `intent show`, `intent transition`) and through existing `new`, `status`, `list`, `next`, `validate`, `branch`, `transition` and `close` aliases. Both use the same explicit-project-root Core rules. The source compatibility entry point is still `bun scripts/aidlc.ts` and existing package scripts are preserved.
 
 Legacy command dispatch validates configuration, state and installation-manifest compatibility before any command can write files or create directories. Recognized legacy projects without a manifest remain supported. Only `setup` can start without configuration; commands such as `new` require initialized configuration. Unsupported schema or component versions must be handled by a compatible CLI or explicit migration.
 
-Core configuration parsing, intent validation, installation and diagnostics accept an explicit project root and return data. Legacy lifecycle command dispatch remains at the CLI boundary; its later extraction and modern intent subcommands are separate work.
+Core configuration parsing, intent validation, lifecycle operations, installation and diagnostics accept an explicit project root and return data. CLI layers handle command formatting and process exit codes.
+
+### Workflow presets and intent schemas
+
+Configuration schema version remains `1`. An omitted `workflow_preset` means `default`; `intent_schema` may be omitted or set to `full-v1` for default. The compact Core workflow can be selected explicitly for an existing project with:
+
+```yaml
+version: 1
+workflow_preset: compact
+governance_profile: standard
+```
+
+The optional `intent_schema: compact-v1` makes the selection explicit. If omitted, compact selects `compact-v1`; mismatched or unknown selectors are errors. Presets define the intent fields, required roles, lifecycle states and evidence checks. Governance remains independently selected. Where compact configuration omits role, transition or approval-gate sections, the compact preset supplies its defaults.
+
+Configuration uses block mappings and block lists. Scalar values or inline arrays in structural sections such as `lifecycle.transitions` and `agents.required` are rejected rather than silently ignored.
+
+New compact intents use `id`, `title`, `type` (`feature`, `bug` or `experiment`), `status` and `branch`, with Objective, Scope, Acceptance Criteria, Plan, Validation and Review sections. They do not require story points or retry counts. A missing per-intent `schema` field always means legacy `full-v1`, even in a compact project. Existing intents are preserved without automatic conversion. Historical terminal intents remain readable; an active full-schema intent in a state unavailable in compact must be finished under the default preset or explicitly migrated before continuing in compact.
+
+The installer still accepts `init --preset default --harness codex`; generating or installing Unity Mini and harness adapters remains separate work.
 
 ## Safe updates and rollback
 
@@ -101,4 +119,4 @@ The workflow reserves `gpt-6.2-astra` at `high` for high-risk or unresolved revi
 
 ## Next milestones
 
-The roadmap lives at `docs/aidlc-cli-roadmap.md` in the source repository. Local safe updates/migrations are implemented for review. Next are configurable lifecycle presets, adapters, Task Observer, Unity Mini, context/resume and multi-project inventory. Unity skills will be supplied separately by the user. No game project or global skill installation is modified by this bootstrap.
+The roadmap lives at `docs/aidlc-cli-roadmap.md` in the source repository. Local safe updates/migrations and shared lifecycle with generic compact schema support are complete following validation, independent review and final acceptance. Adapters, Task Observer, Unity Mini, context/resume and multi-project inventory remain planned. Unity skills will be supplied separately by the user. No game project or global skill installation is modified by this bootstrap.

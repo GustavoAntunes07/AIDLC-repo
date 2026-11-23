@@ -14,6 +14,7 @@ export type IntentStatus =
 export type AidlcConfig = {
   schemaVersion: number;
   workflowPreset: string;
+  intentSchema: string;
   harness: string;
   governanceProfile: string;
   validationCommands: string[];
@@ -41,7 +42,7 @@ export const VALID_STATUSES: IntentStatus[] = [
   "escalated",
 ];
 
-const DEFAULT_TRANSITIONS: Record<IntentStatus, IntentStatus[]> = {
+export const DEFAULT_TRANSITIONS: Record<IntentStatus, IntentStatus[]> = {
   backlog: ["context_ready", "closed", "escalated"],
   context_ready: ["in_development", "backlog", "closed", "escalated"],
   in_development: ["ready_for_testing", "context_ready", "closed", "escalated"],
@@ -53,9 +54,27 @@ const DEFAULT_TRANSITIONS: Record<IntentStatus, IntentStatus[]> = {
   escalated: ["backlog", "closed"],
 };
 
+export const COMPACT_TRANSITIONS: Record<IntentStatus, IntentStatus[]> = {
+  backlog: ["context_ready", "closed", "escalated"],
+  context_ready: ["in_development", "backlog", "closed", "escalated"],
+  in_development: ["review", "context_ready", "closed", "escalated"],
+  ready_for_testing: [],
+  review: ["done", "in_development", "closed", "escalated"],
+  approved: [], done: [], closed: [], escalated: ["backlog", "closed"],
+};
+export const WORKFLOW_PRESETS = {
+  default: { schema: "full-v1", roles: ["aidlc-orchestrator", "reader", "planner", "builder", "tester", "reviewer", "documenter"], transitions: DEFAULT_TRANSITIONS, states: VALID_STATUSES },
+  compact: { schema: "compact-v1", roles: ["planner", "builder", "reviewer"], transitions: COMPACT_TRANSITIONS, states: VALID_STATUSES.filter(s => !["ready_for_testing", "approved"].includes(s)) },
+};
+export function workflowPreset(name: string) {
+  if (name !== "default" && name !== "compact") throw new Error(`Unsupported workflow preset: ${name}`);
+  return WORKFLOW_PRESETS[name];
+}
+
 export const DEFAULT_CONFIG: AidlcConfig = {
   schemaVersion: 1,
   workflowPreset: "default",
+  intentSchema: "full-v1",
   harness: "codex",
   governanceProfile: "strict",
   validationCommands: ["bun aidlc:doctor"],
@@ -282,10 +301,17 @@ export function parseConfigYaml(content: string): AidlcConfig {
 
     indentPaths.set(indent, key);
 
+    const blockPath = ["branches", "review", "validation", "validation.commands", "agents", "agents.required", "governance_profiles", "lifecycle", "lifecycle.terminal_statuses", "lifecycle.transitions"].includes(fullPath)
+      || /^governance_profiles\.[^.]+(?:\.approval_gates)?$/.test(fullPath)
+      || /^lifecycle\.transitions\.[^.]+$/.test(fullPath);
+    if (blockPath && value) throw new Error(`Configuration ${fullPath} requires block syntax; scalar and inline values are unsupported`);
+    if (["workflow_preset", "intent_schema", "harness", "governance_profile"].includes(fullPath) && !value) throw new Error(`Missing configuration value: ${fullPath}`);
+    if (fullPath.startsWith("lifecycle.transitions.") && !isIntentStatus(fullPath.split(".")[2])) throw new Error(`Invalid lifecycle transition state: ${key}`);
     if (!value) continue;
 
     if (fullPath === "version") { hasVersion = true; config.schemaVersion = Number(value); }
     if (fullPath === "workflow_preset") config.workflowPreset = value;
+    if (fullPath === "intent_schema") config.intentSchema = value;
     if (fullPath === "harness") config.harness = value;
     if (fullPath === "governance_profile") config.governanceProfile = value;
     if (fullPath === "branches.default") config.defaultBranch = value;
@@ -306,9 +332,11 @@ export function parseConfigYaml(content: string): AidlcConfig {
     config.validationCommands = [...DEFAULT_CONFIG.validationCommands];
   }
 
-  if (config.requiredAgents.length === 0) {
-    config.requiredAgents = [...DEFAULT_CONFIG.requiredAgents];
-  }
+  const preset = workflowPreset(config.workflowPreset);
+  if (!seen.has("intent_schema")) config.intentSchema = preset.schema;
+  if (!seen.has("agents.required")) config.requiredAgents = [...preset.roles];
+  if (!seen.has("lifecycle.transitions")) config.transitions = structuredClone(preset.transitions);
+  if (!seen.has("governance_profiles")) config.approvalGates = Object.fromEntries(Object.entries(DEFAULT_CONFIG.approvalGates).map(([name, gates]) => [name, gates.filter(s => preset.states.includes(s))]));
 
   if (config.terminalStatuses.length === 0) {
     config.terminalStatuses = [...DEFAULT_CONFIG.terminalStatuses];
@@ -326,12 +354,25 @@ export function loadProjectConfig(root: string): AidlcConfig {
 export function configErrors(config: AidlcConfig): string[] {
   const errors: string[] = [];
   if (config.schemaVersion !== 1) errors.push(`Unsupported configuration schema: ${config.schemaVersion}`);
-  if (config.workflowPreset !== "default") errors.push(`Unsupported workflow preset: ${config.workflowPreset}`);
+  let preset: ReturnType<typeof workflowPreset>;
+  try { preset = workflowPreset(config.workflowPreset); }
+  catch (error) { errors.push((error as Error).message); return errors; }
+  if (config.intentSchema !== preset.schema) errors.push(`Unsupported intent schema ${config.intentSchema} for workflow preset ${config.workflowPreset}; expected ${preset.schema}`);
   if (config.harness !== "codex") errors.push(`Unsupported harness: ${config.harness}`);
   if (!config.approvalGates[config.governanceProfile]) errors.push(`Unknown governance profile: ${config.governanceProfile}`);
   if (!Number.isInteger(config.maxReviewCycles) || config.maxReviewCycles < 1) errors.push("review.max_cycles must be a positive integer");
   for (const agent of config.requiredAgents) {
     if (!/^[a-z][a-z0-9-]*$/.test(agent)) errors.push(`Invalid agent identifier: ${agent}`);
   }
+  for (const role of preset.roles) if (!config.requiredAgents.includes(role)) errors.push(`Workflow preset ${config.workflowPreset} requires role: ${role}`);
+  if (config.initialStatus !== "backlog") errors.push("Lifecycle initial status must be backlog");
+  if (config.terminalStatuses.length !== 2 || !["done", "closed"].every(s => config.terminalStatuses.includes(s as IntentStatus))) errors.push("Lifecycle terminal statuses must be done and closed");
+  for (const status of VALID_STATUSES) {
+    for (const target of config.transitions[status] ?? []) {
+      if (!preset.transitions[status].includes(target)) errors.push(`Unsupported ${config.workflowPreset} lifecycle transition: ${status} -> ${target}`);
+    }
+  }
+  for (const gates of Object.values(config.approvalGates)) for (const gate of gates) if (!preset.states.includes(gate)) errors.push(`Unsupported approval gate ${gate} for workflow preset ${config.workflowPreset}`);
+  if (!config.intentBranchPrefix || /[\s\\]|\.\./.test(config.intentBranchPrefix)) errors.push("Invalid intent branch prefix");
   return errors;
 }

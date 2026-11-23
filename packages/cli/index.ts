@@ -15,6 +15,13 @@ Usage: aidlc [--cwd <project>] <command>
   init [--preset default] [--harness codex] [--governance strict|standard|autonomous]
   config
   doctor
+  intent new <title> [--type feature|bug|experiment]
+  intent list
+  intent show <intent>
+  intent transition <intent> <status>
+  intent close <intent> [reason]
+  intent branch <intent>
+  intent status
   update --dry-run [--to ${FRAMEWORK_VERSION}]
   update --to ${FRAMEWORK_VERSION}
   update --recover <transaction-id>
@@ -41,7 +48,13 @@ export function runCli(input: string[], resourcesDir?: string): number {
       argv.splice(cwdIndex, 2);
     }
     root = discoverProject(root);
-    const [command, ...args] = argv;
+    let [command, ...args] = argv;
+    const modernIntentCommand = command === "intent";
+    if (command === "intent") {
+      const [subcommand, ...rest] = args;
+      if (!["new", "list", "show", "transition", "close", "branch", "status"].includes(subcommand)) throw new Error(`Unknown intent command: ${subcommand ?? "(missing)"}. Run aidlc --help.`);
+      command = subcommand; args = rest;
+    }
     if (!command || ["help", "--help", "-h"].includes(command)) { console.log(HELP); return 0; }
     if (command === "--version") { console.log(FRAMEWORK_VERSION); return 0; }
     if (["update", "migrate"].includes(command)) {
@@ -105,12 +118,11 @@ export function runCli(input: string[], resourcesDir?: string): number {
       console.log(JSON.stringify(config, null, 2));
       return 0;
     }
-    if (!["setup", "check-setup", "new", "status", "list", "next", "validate", "branch", "transition", "close"].includes(command)) throw new Error(`Unknown command: ${command}. Run aidlc --help.`);
+    if (!["setup", "check-setup", "new", "status", "list", "show", "next", "validate", "branch", "transition", "close"].includes(command)) throw new Error(`Unknown command: ${command}. Run aidlc --help.`);
     const incompatible = compatibilityErrors(root, { allowMissingConfig: command === "setup" });
     if (incompatible.length) throw new Error(incompatible.join("\n"));
-    // Legacy commands retain their established cwd-based behavior at the CLI boundary.
-    process.chdir(root);
-    runLegacy([command, ...args]);
+    // Both interfaces share explicit-root Core operations.
+    runLegacy([command, ...args], root, { requireTitle: modernIntentCommand });
     return 0;
   } catch (error) {
     console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);

@@ -1,8 +1,8 @@
 # Plano de evolução do AIDLC
 
-Atualizado em 22 de novembro de 2026. Direção: distribuir o AIDLC como ferramenta instalável e atualizável, com um Core compartilhado, adapters para agentes e presets de trabalho. O Task Observer e o preset Unity Mini fazem parte dessa arquitetura.
+Atualizado em 23 de novembro de 2026. Direção: distribuir o AIDLC como ferramenta instalável e atualizável, com um Core compartilhado, adapters para agentes e presets de trabalho. O Task Observer e o preset Unity Mini fazem parte dessa arquitetura.
 
-Este é o plano de produto. O bootstrap 0.1.0 foi concluído. A atualização local 0.2.0, com migração de manifesto, backup e rollback, foi implementada e testada e está em revisão para aceite final. Os demais comandos e presets descritos continuam planejados. O contrato executável do checkout continua em `.aidlc/config.yaml`.
+Este é o plano de produto. O bootstrap 0.1.0, a atualização local 0.2.0 e o ciclo de vida compartilhado com schema compacto genérico foram concluídos com aceite final. O ciclo de correções inclui a resolução multiplataforma do npm na suíte de empacotamento. Os demais itens seguem planejados. O contrato executável do checkout continua em `.aidlc/config.yaml`.
 
 ## Objetivo e origem
 
@@ -30,25 +30,34 @@ Três escolhas independentes:
 
 | Escolha | Exemplos | Responsabilidade |
 |---|---|---|
-| Preset de trabalho | `default`, `unity-mini` | Papéis, schema de intent, fluxo e validações |
+| Preset de trabalho | `default`, `compact`, futuro `unity-mini` | Papéis, schema de intent, fluxo e validações |
 | Governança | `strict`, `standard`, `autonomous` | Aprovações e limites de autonomia |
 | Adapter | `codex`, `claude` | Arquivos e capacidades do executor |
 
 O preset reduzido pode usar governança estrita. Reduzir campos e papéis não implica retirar revisão, evidências ou aprovação.
 
+O Core de ciclo de vida define `default` com schema `full-v1` e o preset genérico `compact` com schema `compact-v1`. Em configuração versão 1, `workflow_preset: compact` seleciona o fluxo compacto; `intent_schema` é opcional e, quando fornecido, deve corresponder ao preset. A governança continua independente. Um intent sem campo `schema` é sempre interpretado como `full-v1`, inclusive em projeto compacto. Não converter intents automaticamente: preservar histórico terminal e exigir que intents ativos em estados incompatíveis terminem no preset default ou recebam migração explícita.
+
+Intents compactos usam os metadados `id`, `title`, `type` (`feature`, `bug`, `experiment`), `status` e `branch`; suas seções são Objective, Scope, Acceptance Criteria, Plan, Validation e Review. O fluxo normal usa backlog, context_ready, in_development, review e done, com `closed` e `escalated` como saídas. Os papéis mínimos são Planner, Builder e Reviewer. A integração de instalação deste preset, dos adapters e da avaliação jogável pertence às etapas futuras.
+
 ## Instalação e atualização
 
-Interface alvo: `init` com preset default/Codex, `doctor` e `config` fazem parte do bootstrap; Unity Mini e sync permanecem planejados. Update/migrate/rollback locais estão implementados na versão 0.2.0, em revisão:
+Interface alvo: `init` com preset default/Codex, `doctor` e `config` fazem parte do bootstrap; Unity Mini e sync permanecem planejados. Update/migrate/rollback locais estão implementados na versão 0.2.0. A extração do ciclo de vida e o suporte Core ao preset compacto foram concluídos:
 
 ```bash
 aidlc init --preset default --harness codex
-aidlc init --preset unity-mini --harness codex
 aidlc doctor
+aidlc intent new "Title"
+aidlc intent list
+aidlc intent show <id>
+aidlc intent transition <id> <status>
 aidlc update --dry-run
 aidlc update --to <version>
 aidlc migrate
 aidlc sync
 ```
+
+`init --preset unity-mini` permanece planejado para uma etapa futura, após validar sua integração de adapter e evidências de playtest.
 
 Separar versão do pacote CLI/Core, versão de schema, versão de preset/adapter e versão instalada em cada projeto. Registrar componentes e hashes da instalação em um manifesto local. Atualizar o CLI global não atualiza silenciosamente todos os projetos.
 
@@ -133,13 +142,13 @@ Separar configuração gerada de execução real. Se um harness não suporta tro
 
 ## Ordem de execução
 
-Cada linha é um intent de implementação com critérios verificáveis. O primeiro foi concluído com aceite manual do desenvolvedor em 23 de novembro de 2026. O segundo foi concluído com aceite manual em 23 de novembro de 2026, após a correção pré-journal e 55 testes aprovados; os demais permanecem em backlog. As dependências registradas são sequência de planejamento; o CLI atual ainda não faz enforcement dessas relações.
+Cada linha é um intent de implementação com critérios verificáveis. Os três primeiros foram concluídos com aceite manual do desenvolvedor em 23 de novembro de 2026. Os demais permanecem em backlog. As dependências registradas são sequência de planejamento; o CLI atual ainda não faz enforcement dessas relações.
 
 | Ordem | Intent | Entrega |
 |---|---|---|
 | 1 | [INTENT-6xe7](../intents/INTENT-6xe7.md) | Extract shared core and bootstrap installable CLI |
 | 2 | [INTENT-6xhv](../intents/INTENT-6xhv.md) | Implement safe project updates and migrations |
-| 3 | [INTENT-6xlf](../intents/INTENT-6xlf.md) | Expose intent lifecycle and configurable workflow presets |
+| 3 | [INTENT-6xlf](../intents/INTENT-6xlf.md) | Expose intent lifecycle and configurable workflow presets (in development; final acceptance pending) |
 | 4 | [INTENT-6xpb](../intents/INTENT-6xpb.md) | Generate harness adapters and role model configuration |
 | 5 | [INTENT-6xt7](../intents/INTENT-6xt7.md) | Integrate project-scoped Task Observer with staged skill improvements |
 | 6 | [INTENT-6xwp](../intents/INTENT-6xwp.md) | Add Unity Mini preset with compact intents and playtest evidence |
@@ -163,4 +172,4 @@ Preservar os comandos antigos durante a migração e testar instalações como c
 
 ## Próximo passo
 
-INTENT-6xhv concluído com aceite final do desenvolvedor. O próximo intent é INTENT-6xlf, de lifecycle e presets configuráveis; seu início segue a aprovação de implementação do perfil standard. A governança deste checkout agora é `standard`, por solicitação explícita do usuário; a aprovação final continua exigida.
+INTENT-6xlf concluído com aceite final do desenvolvedor, após revisão independente e 76 testes com 686 assertions aprovadas no Windows. A próxima entrega é INTENT-6xpb, de adapters e configuração de modelos por papel, cujo início foi autorizado. A governança deste checkout continua `standard`, por solicitação explícita do usuário.
