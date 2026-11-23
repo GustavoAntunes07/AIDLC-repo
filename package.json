@@ -4,7 +4,7 @@
     "aidlc": "bun scripts/aidlc.ts",
     "aidlc:setup": "bun scripts/aidlc.ts setup",
     "aidlc:check": "bun scripts/aidlc.ts check-setup",
-    "aidlc:new": "bun scripts/aidlc.ts new", 
+    "aidlc:new": "bun scripts/aidlc.ts new",
     "aidlc:status": "bun scripts/aidlc.ts status",
     "aidlc:next": "bun scripts/aidlc.ts next",
     "aidlc:validate": "bun scripts/aidlc.ts validate",
@@ -12,13 +12,28 @@
     "aidlc:branch": "bun scripts/aidlc.ts branch",
     "aidlc:transition": "bun scripts/aidlc.ts transition",
     "aidlc:close": "bun scripts/aidlc.ts close",
-    "aidlc:doctor": "bun scripts/aidlc.ts doctor"
+    "aidlc:doctor": "bun scripts/aidlc.ts doctor",
+    "build": "bun scripts/build.ts",
+    "prepack": "bun run build"
   },
   "devDependencies": {
     "@types/node": "^25.9.2"
   },
-  "dependencies": {
-    "fs": "^0.0.1-security",
-    "path": "^0.12.7"
+  "dependencies": {},
+  "name": "aidlc",
+  "version": "0.2.0",
+  "description": "Installable development lifecycle for coding agents",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "aidlc": "dist/aidlc.js"
+  },
+  "files": [
+    "dist/",
+    "resources/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22"
   }
 }

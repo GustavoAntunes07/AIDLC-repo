@@ -47,7 +47,8 @@ function createConfiguredProject() {
     join(workspace, ".aidlc", "state.json"),
     JSON.stringify({ version: "1.0.0", initialized: true }, null, 2),
   );
-  writeFile(join(workspace, ".aidlc", "config.yaml"), readFileSync(configPath, "utf-8"));
+  // Gate assertions use an explicit fixture profile, not the developer checkout's active choice.
+  writeFile(join(workspace, ".aidlc", "config.yaml"), readFileSync(configPath, "utf-8").replace(/^governance_profile: .*$/m, "governance_profile: strict"));
 
   for (const agent of [
     "aidlc-orchestrator",
@@ -121,6 +122,20 @@ afterEach(() => {
 });
 
 describe("AI-DLC CLI", () => {
+  test("standard skips intermediate gates and reports the final completion gate", () => {
+    createConfiguredProject();
+    writeFile(join(workspace, ".aidlc", "config.yaml"), readFileSync(configPath, "utf-8").replace(/^governance_profile: .*$/m, "governance_profile: standard"));
+    writeIntent("ready_for_testing");
+    for (const target of ["review", "approved"]) {
+      const result = runAidlc(["transition", "INTENT-001", target]);
+      expect(result.exitCode).toBe(0);
+      expect(output(result)).not.toContain("Approval gate reached");
+    }
+    const done = runAidlc(["transition", "INTENT-001", "done"]);
+    expect(done.exitCode).toBe(0);
+    expect(output(done)).toContain("Approval gate reached for governance profile: standard");
+  });
+
   test("setup creates state and config files", () => {
     const result = runAidlc(["setup"]);
 
