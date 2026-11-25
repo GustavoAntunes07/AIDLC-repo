@@ -1,17 +1,17 @@
 # AIDLC
 
-A development lifecycle for coding agents, evolving from a repository template into an installable CLI and shared Core. The local package is version `0.3.0` and supports native Codex and Claude Code agent definitions with the default workflow.
+A development lifecycle for coding agents, evolving from a repository template into an installable CLI and shared Core. The local package is version `0.4.0` and supports native Codex and Claude Code agent definitions, compact workflows and a project-scoped Task Observer.
 
 ## Build and install locally
 
-Contributors use Bun 1.4 or later to build and test. The installed package uses Node.js 22 or later and has no runtime npm dependencies. This change was exercised on Windows with Node 24.11.1; other supported Node versions still need CI coverage.
+Contributors use Bun 1.4 or later to build and test. The installed package uses Node.js 22 or later and has no runtime npm dependencies. This delivery was exercised on Windows with Bun 1.4.0 and Node 26.13.1; other supported Node versions still need CI coverage.
 
 ```powershell
 bun install
 bun run build
 bun test
 npm pack
-npm install --global ./aidlc-0.3.0.tgz
+npm install --global ./aidlc-0.4.0.tgz
 ```
 
 The package remains private; releases are local artifacts pending manual acceptance. `npm pack` builds a local tarball; it does not publish a release. Do not use an unverified registry package with the same name.
@@ -70,22 +70,22 @@ Configuration uses block mappings and block lists. Scalar values or inline array
 
 New compact intents use `id`, `title`, `type` (`feature`, `bug` or `experiment`), `status` and `branch`, with Objective, Scope, Acceptance Criteria, Plan, Validation and Review sections. They do not require story points or retry counts. A missing per-intent `schema` field always means legacy `full-v1`, even in a compact project. Existing intents are preserved without automatic conversion. Historical terminal intents remain readable; an active full-schema intent in a state unavailable in compact must be finished under the default preset or explicitly migrated before continuing in compact.
 
-The installer supports `init --preset default --harness codex|claude`. The compact intent preset can be configured explicitly. The Unity Mini preset and Task Observer remain separate work.
+The installer supports `init --preset default --harness codex|claude`. The compact intent preset can be configured explicitly. Unity Mini remains planned.
 
 ## Safe updates and rollback
 
-This CLI bundles exactly target `0.3.0` and supports installed releases `0.1.0`, `0.2.0` and `0.3.0`. Updating the CLI package and upgrading each project's installed resources are separate operations. Nothing is fetched from a registry by these commands.
+This CLI bundles exactly target `0.4.0` and supports installed releases `0.1.0`, `0.2.0`, `0.3.0` and `0.4.0`. Updating the CLI package and upgrading each project's installed resources are separate operations. Nothing is fetched from a registry by these commands.
 
 ```powershell
 aidlc update --dry-run
-aidlc update --to 0.3.0
+aidlc update --to 0.4.0
 aidlc rollback <transaction-id> --dry-run
 aidlc rollback <transaction-id>
 ```
 
 Dry-run prints source/target versions, migrations and per-path actions without writing files or creating a lock. Application requires an explicit target. A locally modified or missing managed file blocks the complete application before any backup or content write. Edits outside the selected harness instruction block remain user-owned.
 
-The upgrade migrates installation manifest schema 1 to schema 2, adding update protocol 1 and backup ownership. Configuration schema stays at 1 and project state stays at its existing format. `aidlc migrate --to 0.3.0` runs this same bundled update/migration transaction; it is not a generic arbitrary-schema migrator. The framework checkout's legacy template has no manifest and is not implicitly adopted.
+The upgrade migrates installation manifest schema 1 to schema 2, adding update protocol 1 and backup ownership. Configuration schema stays at 1 and project state stays at its existing format. `aidlc migrate --to 0.4.0` runs this same bundled update/migration transaction; it is not a generic arbitrary-schema migrator. The framework checkout's legacy template has no manifest and is not implicitly adopted.
 
 Application creates `.aidlc/backups/<transaction-id>/snapshot.json` and a journal before changing managed content. The snapshot contains before/after managed parts and installation metadata; it does not copy configuration, intents, context, observations, decisions, assets or external skills. Content is atomically replaced and installation metadata is written last. Successful application prints the transaction ID; repeating the same update is a no-op.
 
@@ -103,7 +103,13 @@ Update locks are published as complete records using an exclusive hard link, so 
 
 Rollback restores prior managed content and manifest, including the prior schema, while leaving user-owned files and subsequent configuration edits intact. It refuses corrupted backups, unknown paths and conflicting managed edits. Backups/journals remain for inspection. This release supports process-interruption recovery; it does not claim filesystem/hardware power-loss guarantees or concurrent-editor transactional isolation. Avoid editing managed content while an update is running.
 
-Tests include the actual archived 0.1.0 package, abrupt child-process exits before and after installation metadata, idempotency, rollback conflicts and a consumer installed from the 0.3.0 tarball. Windows/Node 24.11.1 is the validated runtime; the wider Node >=22/platform matrix remains pending CI coverage.
+Tests include historical package upgrades, abrupt child-process exits before and after installation metadata, idempotency, rollback conflicts and a consumer installed from the 0.4.0 tarball. This delivery was validated on Windows with Bun 1.4.0 and Node 26.13.1; the wider Node >=22/platform matrix remains pending CI coverage.
+
+## Project-scoped Task Observer
+
+The Observer is opt-in through `observer.enabled: true` in `.aidlc/config.yaml`; it is disabled by default. It provides session-guided capture for useful corrections, repeated workflows, tool limitations and skill gaps. Codex and Claude automatic activation hooks are unavailable in this release. A manually reported session checkpoint records that the CLI command ran; it does not prove automatic activation or continuous observation.
+
+Capture and proposal records live under `.aidlc/observations/` in the project. They are preserved as user data by framework updates. Capture reuses the active coding session and does not start another model call per tool. See [Task Observer commands, record formats and safeguards](resources/task-observer.md).
 
 ## Harness adapters and models
 
@@ -126,7 +132,7 @@ role_models:
     reasoning: "high"
 ```
 
-Use `aidlc sync --dry-run` to preview changes to generated role files and `aidlc sync` to apply them. Sync is idempotent, preserves user configuration, intents, local instruction text and external skills, and reports conflicts for edited or missing managed files. It uses the transaction backup and rollback path shared with updates. Because project configuration is user-owned, sync reads the valid role overrides currently saved there. Use `aidlc update --dry-run` and the explicit `aidlc update --to 0.3.0` to update framework resources.
+Use `aidlc sync --dry-run` to preview changes to generated role files and `aidlc sync` to apply them. Sync is idempotent, preserves user configuration, intents, local instruction text and external skills, and reports conflicts for edited or missing managed files. It uses the transaction backup and rollback path shared with updates. Because project configuration is user-owned, sync reads the valid role overrides currently saved there. Use `aidlc update --dry-run` and the explicit `aidlc update --to 0.4.0` to update framework resources.
 
 `aidlc harness` prints requested role bindings and their agent paths. Use `--role planner` to inspect one role or `--specialist` to prepare an explicit specialist reviewer definition. Add `--model <id>` and `--reasoning <effort>` to render an override for a separate task context. The command reports runtime as `unverified`. Use the target harness's model catalog and effective session settings to verify model availability and execution. Codex CLI 0.159.2 rejected Sol 6.2 with the account used for validation. Claude Code 2.1.94 discovered all seven generated roles, and its runtime probe stopped at the account credit limit.
 
@@ -134,8 +140,8 @@ Run review in an independent context. Selecting a reviewer model does not establ
 
 ## Next milestones
 
-The roadmap lives at `docs/aidlc-cli-roadmap.md` in the source repository. Local safe updates/migrations and shared lifecycle with generic compact schema support are complete following validation, independent review and final acceptance. Adapters, Task Observer, Unity Mini, context/resume and multi-project inventory remain planned. Unity skills will be supplied separately by the user. No game project or global skill installation is modified by this bootstrap.
+The roadmap lives at `docs/aidlc-cli-roadmap.md` in the source repository. Local safe updates/migrations, shared lifecycle with generic compact schema support, and harness adapters are complete. Task Observer implementation is in progress; Unity Mini, context/resume and multi-project inventory remain planned. Unity skills will be supplied separately by the user. No game project or global skill installation is modified by this bootstrap.
 
-Version 0.3.0 records the adapter compatibility boundary. Earlier CLIs reject its installation manifest. Upgrade older installations with this CLI before using sync. Role model values support quoted strings. Put YAML comments on their own lines. Inline comments after unquoted role model values are rejected before writes.
+Version 0.3.0 records the adapter compatibility boundary; version 0.4.0 adds the Task Observer. CLIs older than 0.3.0 reject adapter installations, and older CLIs reject 0.4.0 installations. Upgrade older installations with this CLI before using sync. Role model values support quoted strings. Put YAML comments on their own lines. Inline comments after unquoted role model values are rejected before writes.
 
 Runtime validation used project overrides resolved by `aidlc harness` and explicitly passed to separate read-only Codex CLI sessions. Native session logs confirmed gpt-6.1-sol with high and medium effort, and both sessions completed successfully. Sol 6.2 and Claude inference remain deferred.

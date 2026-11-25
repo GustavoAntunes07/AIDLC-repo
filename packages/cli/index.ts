@@ -9,6 +9,7 @@ import { loadResources } from "../core/payload";
 import { applySync, applyUpdate, planUpdate } from "../core/update";
 import { rollback } from "../core/transactions";
 import { agentPath, isHarness, renderAgent, roleBinding, ROLE_NAMES } from "../core/harness";
+import { runObserver } from "../core/observer";
 
 const HELP = `AIDLC ${FRAMEWORK_VERSION}
 Usage: aidlc [--cwd <project>] <command>
@@ -18,6 +19,14 @@ Usage: aidlc [--cwd <project>] <command>
   harness [--role <role>] [--specialist] [--model <id>] [--reasoning <effort>]
   config
   doctor
+  observer status|list|show <id>
+  observer session --session <id> --intent <intent>
+  observer capture --file <json>
+  observer proposal stage --file <json>
+  observer proposal show <id>
+  observer proposal review <id> --decision approved|rejected --reviewer <session> --hash <hash> --note <text>
+  observer proposal apply|recover <id> --authorize <hash>
+  observer proposal export <id> --file <generalized-json> --output .aidlc/observations/exports/<name>.json
   intent new <title> [--type feature|bug|experiment]
   intent list
   intent show <intent>
@@ -36,7 +45,8 @@ Compatible commands: setup, check-setup, new, status, list, next, validate,
 branch <intent>, transition <intent> <status>, close <intent> [reason].
 
 Updates use only this package's bundled target. No network or publication is performed.
-Unity Mini, Task Observer and legacy-template adoption are not available yet.
+Observer capture is opt-in and session-guided; automatic activation hooks are unavailable.
+Unity Mini and legacy-template adoption are not available yet.
 `;
 
 export function runCli(input: string[], resourcesDir?: string): number {
@@ -60,6 +70,9 @@ export function runCli(input: string[], resourcesDir?: string): number {
     }
     if (!command || ["help", "--help", "-h"].includes(command)) { console.log(HELP); return 0; }
     if (command === "--version") { console.log(FRAMEWORK_VERSION); return 0; }
+    if (command === "observer") {
+      console.log(JSON.stringify(runObserver(root, args), null, 2)); return 0;
+    }
     if (command === "sync") {
       if (args.length > 1 || (args.length && args[0] !== "--dry-run")) throw new Error("Usage: aidlc sync [--dry-run]");
       if (!resourcesDir) throw new Error("Packaged resources are unavailable");
@@ -158,6 +171,7 @@ export function runCli(input: string[], resourcesDir?: string): number {
       if (args.length) throw new Error("doctor does not accept arguments");
       const result = inspectProject(root);
       console.log("AI-DLC Doctor");
+      if (result.observer) console.log("Task Observer: " + JSON.stringify(result.observer));
       for (const warning of result.warnings) console.warn(`Warning: ${warning}`);
       for (const error of result.errors) console.error(`Error: ${error}`);
       if (!result.errors.length) console.log("AI-DLC doctor completed");

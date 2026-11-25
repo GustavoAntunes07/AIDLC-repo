@@ -74,7 +74,7 @@ describe("harness configuration", () => {
     config('role_models:\n  planner:\n    model: custom-model\n');
     const manifest = join(workspace, ".aidlc/install.json");
     const original = readFileSync(manifest, "utf8");
-    const updated = cli(["update", "--to", "0.3.0"]);
+    const updated = cli(["update", "--to", "0.4.0"]);
     expect(updated.code).toBe(0);
     const id = JSON.parse(updated.text).id;
     const agent = join(workspace, ".codex/agents/planner.toml");
@@ -87,7 +87,32 @@ describe("harness configuration", () => {
     expect(cli(["rollback", id]).code).toBe(0);
     expect(readFileSync(manifest, "utf8")).toBe(original);
     expect(cli(["doctor"]).code).toBe(0);
-    expect(cli(["update", "--to", "0.3.0"]).code).toBe(0);
+    expect(cli(["update", "--to", "0.4.0"]).code).toBe(0);
+  });
+
+  test("0.3.0 CLI refuses a 0.4.0 installation before changing managed files", () => {
+    const previous = join(workspace, "previous-0.3.0-cli");
+    mkdirSync(previous);
+    const archive = join(workspace, "previous-0.3.0.tar");
+    expect(spawnSync("git", ["archive", "--format=tar", `--output=${archive}`, "a542e19"], { cwd: repo }).status).toBe(0);
+    expect(spawnSync("tar", ["-xf", archive, "-C", previous]).status).toBe(0);
+    const runOld = (args: string[]) => spawnSync(process.execPath, [join(previous, "scripts/aidlc.ts"), "--cwd", workspace, ...args], { encoding: "utf8" });
+    expect(runOld(["init"]).status).toBe(0);
+
+    const manifest = join(workspace, ".aidlc/install.json");
+    const managed = join(workspace, ".codex/agents/planner.toml");
+    const updated = cli(["update", "--to", "0.4.0"]);
+    expect(updated.code).toBe(0);
+    const currentManifest = readFileSync(manifest, "utf8");
+    const currentManaged = readFileSync(managed, "utf8");
+    expect(JSON.parse(readFileSync(manifest, "utf8")).frameworkVersion).toBe("0.4.0");
+
+    const rejected = runOld(["update", "--to", "0.3.0"]);
+    expect(rejected.status).toBe(1);
+    expect(rejected.stdout + rejected.stderr).toContain("Unsupported installed framework version");
+    expect(readFileSync(managed, "utf8")).toBe(currentManaged);
+    expect(readFileSync(manifest, "utf8")).toBe(currentManifest);
+    expect(cli(["doctor"]).code).toBe(0);
   });
   test("Claude init generates managed native agents and preserves CLAUDE.md instructions", () => {
     const prefix = "# Project instructions\nKeep these local rules.\n";
@@ -107,7 +132,7 @@ describe("harness configuration", () => {
     expect(workflow).toContain("AGENTS.md");
     expect(JSON.parse(readFileSync(join(workspace, ".aidlc/install.json"), "utf8")).harness).toBe("claude");
     expect(cli(["doctor"]).code).toBe(0);
-    expect(cli(["update", "--to", "0.3.0"]).code).toBe(0);
+    expect(cli(["update", "--to", "0.4.0"]).code).toBe(0);
     expect(readFileSync(join(workspace, ".aidlc/workflow.md"), "utf8")).toContain("CLAUDE.md");
   });
 
@@ -169,7 +194,7 @@ describe("harness configuration", () => {
     expect(preview.code).toBe(0);
     expect(JSON.parse(preview.text).actions).toContainEqual(expect.objectContaining({ path: ".codex/agents/planner.toml", action: "update" }));
 
-    expect(cli(["update", "--to", "0.3.0"]).code).toBe(0);
+    expect(cli(["update", "--to", "0.4.0"]).code).toBe(0);
     const planner = readFileSync(join(workspace, ".codex/agents/planner.toml"), "utf8");
     expect(planner).toContain('model = "gpt-custom-model"');
     expect(planner).toContain('model_reasoning_effort = "max"');

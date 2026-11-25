@@ -17,6 +17,7 @@ export type AidlcConfig = {
   workflowPreset: string;
   intentSchema: string;
   harness: string;
+  observerEnabled: boolean;
   roleBindings: Record<string, RoleBinding>;
   governanceProfile: string;
   validationCommands: string[];
@@ -78,6 +79,7 @@ export const DEFAULT_CONFIG: AidlcConfig = {
   workflowPreset: "default",
   intentSchema: "full-v1",
   harness: "codex",
+  observerEnabled: false,
   roleBindings: {},
   governanceProfile: "strict",
   validationCommands: ["bun aidlc:doctor"],
@@ -117,6 +119,9 @@ export const DEFAULT_CONFIG_YAML = `version: 1
 workflow_preset: default
 harness: codex
 governance_profile: strict
+
+observer:
+  enabled: false
 
 branches:
   default: main
@@ -289,6 +294,8 @@ export function parseConfigYaml(content: string): AidlcConfig {
         const from = parent.split(".")[2];
         if (!isIntentStatus(from) || !isIntentStatus(value)) throw new Error(`Invalid lifecycle transition: ${from} -> ${value}`);
         config.transitions[from].push(value);
+      } else if (parent === "observer" || parent.startsWith("observer.")) {
+        throw new Error(`Configuration ${parent} requires mapping syntax with observer.enabled: true or false`);
       } else if (parent === "role_models" || parent.startsWith("role_models.")) {
         throw new Error(`Configuration ${parent} requires mapping syntax`);
       }
@@ -307,11 +314,16 @@ export function parseConfigYaml(content: string): AidlcConfig {
 
     indentPaths.set(indent, key);
 
-    const blockPath = ["branches", "review", "validation", "validation.commands", "agents", "agents.required", "governance_profiles", "lifecycle", "lifecycle.terminal_statuses", "lifecycle.transitions"].includes(fullPath)
+    const blockPath = ["observer", "branches", "review", "validation", "validation.commands", "agents", "agents.required", "governance_profiles", "lifecycle", "lifecycle.terminal_statuses", "lifecycle.transitions"].includes(fullPath)
       || fullPath === "role_models" || /^role_models\.[^.]+$/.test(fullPath)
       || /^governance_profiles\.[^.]+(?:\.approval_gates)?$/.test(fullPath)
       || /^lifecycle\.transitions\.[^.]+$/.test(fullPath);
     if (blockPath && value) throw new Error(`Configuration ${fullPath} requires block syntax; scalar and inline values are unsupported`);
+    if (fullPath.startsWith("observer.")) {
+      if (fullPath !== "observer.enabled") throw new Error(`Unknown observer setting: ${fullPath}`);
+      if (!["true", "false"].includes(value)) throw new Error("observer.enabled must be true or false");
+      config.observerEnabled = value === "true";
+    }
     if (["workflow_preset", "intent_schema", "harness", "governance_profile"].includes(fullPath) && !value) throw new Error(`Missing configuration value: ${fullPath}`);
     if (fullPath.startsWith("lifecycle.transitions.") && !isIntentStatus(fullPath.split(".")[2])) throw new Error(`Invalid lifecycle transition state: ${key}`);
     if (fullPath.startsWith("role_models.")) {
@@ -379,6 +391,7 @@ export function loadProjectConfig(root: string): AidlcConfig {
 export function configErrors(config: AidlcConfig): string[] {
   const errors: string[] = [];
   if (config.schemaVersion !== 1) errors.push(`Unsupported configuration schema: ${config.schemaVersion}`);
+  if (typeof config.observerEnabled !== "boolean") errors.push("observer.enabled must be true or false");
   let preset: ReturnType<typeof workflowPreset>;
   try { preset = workflowPreset(config.workflowPreset); }
   catch (error) { errors.push((error as Error).message); return errors; }

@@ -5,8 +5,9 @@ import { validateProjectIntents } from "./intents";
 export { field, section, validateProjectIntents } from "./intents";
 import { inspectInstallation, readManifest } from "./installation";
 import { agentPath, instructionPath, isHarness } from "./harness";
+import { inspectObserver } from "./observer";
 
-export type Diagnostic = { errors: string[]; warnings: string[] };
+export type Diagnostic = { errors: string[]; warnings: string[]; observer?: ReturnType<typeof inspectObserver> };
 
 export function discoverProject(start: string): string {
   // Commands target exactly the supplied directory; never silently install into an ancestor.
@@ -35,6 +36,9 @@ export function inspectProject(root: string, options: { intents?: boolean } = {}
         if (!existsSync(join(root, path))) result.errors.push(`Missing required agent: ${path}`);
       }
       if (options.intents !== false) result.errors.push(...validateProjectIntents(root, config));
+      result.observer = inspectObserver(root);
+      result.errors.push(...result.observer.errors);
+      result.warnings.push(...result.observer.warnings);
     }
     if (existsSync(join(root, ".aidlc/state.json"))) {
       const state = JSON.parse(readFileSync(join(root, ".aidlc/state.json"), "utf8"));

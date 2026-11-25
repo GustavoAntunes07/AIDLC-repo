@@ -4,7 +4,7 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 import { agentPath, instructionPath, isHarness, type Harness } from "./harness";
 import { DEFAULT_CONFIG } from "./config";
 
-export const FRAMEWORK_VERSION = "0.3.0";
+export const FRAMEWORK_VERSION = "0.4.0";
 export const PENDING_PATH = ".aidlc/pending-update.json";
 export const UPDATE_LOCK_PATH = ".aidlc/update.lock";
 export type UpdateLock = { id: string; pid: number };
@@ -79,7 +79,7 @@ export function readManifest(root: string): Manifest | undefined {
   if (!existsSync(path)) return undefined;
   const value = JSON.parse(readFileSync(path, "utf8"));
   if (![1, 2].includes(value?.schemaVersion)) throw new Error(`Unsupported installation manifest schema: ${value?.schemaVersion}`);
-  if (!["0.1.0", "0.2.0", FRAMEWORK_VERSION].includes(value.frameworkVersion)) throw new Error(`Unsupported installed framework version: ${value.frameworkVersion}; use a compatible CLI or migration`);
+  if (!["0.1.0", "0.2.0", "0.3.0", FRAMEWORK_VERSION].includes(value.frameworkVersion)) throw new Error(`Unsupported installed framework version: ${value.frameworkVersion}; use a compatible CLI or migration`);
   if (value.schemaVersion !== (value.frameworkVersion === "0.1.0" ? 1 : 2) || (value.schemaVersion === 2 && value.updateProtocol !== 1)) throw new Error("Incompatible installation schema/update protocol");
   const harness = value.harness;
   if (value.configSchemaVersion !== 1 || value.preset !== "default" || !isHarness(harness) || (value.schemaVersion === 1 && harness !== "codex") || !Array.isArray(value.managed) || !Array.isArray(value.userOwned) || !value.userOwned.every((p: unknown) => typeof p === "string" && [...USER_PATHS, "AIDLC.md"].includes(p)) || new Set(value.userOwned).size !== value.userOwned.length || value.components?.preset !== value.frameworkVersion || value.components?.[harness] !== value.frameworkVersion) throw new Error("Invalid or incompatible installation manifest");
