@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
+import { agentPath, instructionPath, isHarness, type Harness } from "./harness";
+import { DEFAULT_CONFIG } from "./config";
 
-export const FRAMEWORK_VERSION = "0.2.0";
+export const FRAMEWORK_VERSION = "0.3.0";
 export const PENDING_PATH = ".aidlc/pending-update.json";
 export const UPDATE_LOCK_PATH = ".aidlc/update.lock";
 export type UpdateLock = { id: string; pid: number };
@@ -35,16 +37,18 @@ export type Manifest = {
   frameworkVersion: string;
   configSchemaVersion: 1;
   preset: "default";
-  harness: "codex";
-  components: { preset: string; codex: string };
+  harness: Harness;
+  components: { preset: string } & Partial<Record<Harness, string>>;
   managed: ManagedFile[];
   userOwned: string[];
 };
 export const digest = (text: string) => createHash("sha256").update(text).digest("hex");
-export const MANAGED_PATHS = new Map<string, "file" | "block">([
-  [".aidlc/workflow.md", "file"], ["AGENTS.md", "block"], ["AIDLC.md", "file"],
-  ...["aidlc-orchestrator", "reader", "planner", "builder", "tester", "reviewer", "documenter"].map(name => [`.codex/agents/${name}.toml`, "file"] as const),
-]);
+function managedPaths(harness: Harness): Map<string, "file" | "block"> {
+  return new Map([
+    [".aidlc/workflow.md", "file"], [instructionPath(harness), "block"], ["AIDLC.md", "file"],
+    ...DEFAULT_CONFIG.requiredAgents.map(role => [agentPath(harness, role), "file"] as const),
+  ]);
+}
 export const USER_PATHS = [".aidlc/config.yaml", ".aidlc/state.json", "intents/", ".aidlc/context/", ".aidlc/observations/", "skills/", ".aidlc/backups/"];
 
 export function safePath(root: string, path: string): string {
@@ -75,17 +79,19 @@ export function readManifest(root: string): Manifest | undefined {
   if (!existsSync(path)) return undefined;
   const value = JSON.parse(readFileSync(path, "utf8"));
   if (![1, 2].includes(value?.schemaVersion)) throw new Error(`Unsupported installation manifest schema: ${value?.schemaVersion}`);
-  if (!["0.1.0", FRAMEWORK_VERSION].includes(value.frameworkVersion)) throw new Error(`Unsupported installed framework version: ${value.frameworkVersion}; use a compatible CLI or migration`);
+  if (!["0.1.0", "0.2.0", FRAMEWORK_VERSION].includes(value.frameworkVersion)) throw new Error(`Unsupported installed framework version: ${value.frameworkVersion}; use a compatible CLI or migration`);
   if (value.schemaVersion !== (value.frameworkVersion === "0.1.0" ? 1 : 2) || (value.schemaVersion === 2 && value.updateProtocol !== 1)) throw new Error("Incompatible installation schema/update protocol");
-  if (value.configSchemaVersion !== 1 || value.preset !== "default" || value.harness !== "codex" || !Array.isArray(value.managed) || !Array.isArray(value.userOwned) || !value.userOwned.every((p: unknown) => typeof p === "string" && [...USER_PATHS, "AIDLC.md"].includes(p)) || new Set(value.userOwned).size !== value.userOwned.length || value.components?.preset !== value.frameworkVersion || value.components?.codex !== value.frameworkVersion) throw new Error("Invalid or incompatible installation manifest");
+  const harness = value.harness;
+  if (value.configSchemaVersion !== 1 || value.preset !== "default" || !isHarness(harness) || (value.schemaVersion === 1 && harness !== "codex") || !Array.isArray(value.managed) || !Array.isArray(value.userOwned) || !value.userOwned.every((p: unknown) => typeof p === "string" && [...USER_PATHS, "AIDLC.md"].includes(p)) || new Set(value.userOwned).size !== value.userOwned.length || value.components?.preset !== value.frameworkVersion || value.components?.[harness] !== value.frameworkVersion) throw new Error("Invalid or incompatible installation manifest");
+  const paths = managedPaths(harness);
   const seen = new Set<string>();
   for (const entry of value.managed) {
     if (typeof entry?.path !== "string" || !/^[a-f0-9]{64}$/.test(entry.sha256) || !["file", "block"].includes(entry.kind) || seen.has(entry.path)) throw new Error("Invalid managed-file manifest entry");
     safePath(root, entry.path);
-    if (MANAGED_PATHS.get(entry.path) !== entry.kind || value.userOwned.includes(entry.path)) throw new Error(`Invalid ownership for managed path: ${entry.path}`);
+    if (paths.get(entry.path) !== entry.kind || value.userOwned.includes(entry.path)) throw new Error(`Invalid ownership for managed path: ${entry.path}`);
     seen.add(entry.path);
   }
-  for (const expected of [".aidlc/workflow.md", "AGENTS.md", "AIDLC.md", ".codex/agents/aidlc-orchestrator.toml", ".codex/agents/reader.toml", ".codex/agents/planner.toml", ".codex/agents/builder.toml", ".codex/agents/tester.toml", ".codex/agents/reviewer.toml", ".codex/agents/documenter.toml"]) {
+  for (const expected of paths.keys()) {
     if (!seen.has(expected) && !value.userOwned.includes(expected)) throw new Error(`Incomplete installation manifest: ${expected}`);
   }
   return value;

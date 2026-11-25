@@ -1,8 +1,8 @@
 # Plano de evolução do AIDLC
 
-Atualizado em 23 de novembro de 2026. Direção: distribuir o AIDLC como ferramenta instalável e atualizável, com um Core compartilhado, adapters para agentes e presets de trabalho. O Task Observer e o preset Unity Mini fazem parte dessa arquitetura.
+Atualizado em 24 de novembro de 2026. O plano é distribuir o AIDLC como ferramenta instalável e atualizável, com um Core compartilhado, adapters para agentes e presets de trabalho. O Task Observer e o preset Unity Mini fazem parte dessa arquitetura.
 
-Este é o plano de produto. O bootstrap 0.1.0, a atualização local 0.2.0 e o ciclo de vida compartilhado com schema compacto genérico foram concluídos com aceite final. O ciclo de correções inclui a resolução multiplataforma do npm na suíte de empacotamento. Os demais itens seguem planejados. O contrato executável do checkout continua em `.aidlc/config.yaml`.
+O bootstrap 0.1.0, a atualização local 0.2.0 e o ciclo de vida compartilhado com schema compacto genérico foram concluídos com aceite final. A suíte de empacotamento resolve a entrada do npm no Windows e em sistemas Unix. Os adapters Codex e Claude Code estão implementados e aguardam validação efetiva dos modelos. O contrato executável do checkout está em `.aidlc/config.yaml`.
 
 ## Objetivo e origem
 
@@ -142,13 +142,13 @@ Separar configuração gerada de execução real. Se um harness não suporta tro
 
 ## Ordem de execução
 
-Cada linha é um intent de implementação com critérios verificáveis. Os três primeiros foram concluídos com aceite manual do desenvolvedor em 23 de novembro de 2026. Os demais permanecem em backlog. As dependências registradas são sequência de planejamento; o CLI atual ainda não faz enforcement dessas relações.
+Cada linha é um intent de implementação com critérios verificáveis. Os três primeiros receberam aceite do desenvolvedor em 23 de novembro de 2026. O quarto aguarda a validação de runtime e o aceite final. As dependências registradas orientam a sequência de planejamento.
 
 | Ordem | Intent | Entrega |
 |---|---|---|
 | 1 | [INTENT-6xe7](../intents/INTENT-6xe7.md) | Extract shared core and bootstrap installable CLI |
 | 2 | [INTENT-6xhv](../intents/INTENT-6xhv.md) | Implement safe project updates and migrations |
-| 3 | [INTENT-6xlf](../intents/INTENT-6xlf.md) | Expose intent lifecycle and configurable workflow presets (in development; final acceptance pending) |
+| 3 | [INTENT-6xlf](../intents/INTENT-6xlf.md) | Expose intent lifecycle and configurable workflow presets |
 | 4 | [INTENT-6xpb](../intents/INTENT-6xpb.md) | Generate harness adapters and role model configuration |
 | 5 | [INTENT-6xt7](../intents/INTENT-6xt7.md) | Integrate project-scoped Task Observer with staged skill improvements |
 | 6 | [INTENT-6xwp](../intents/INTENT-6xwp.md) | Add Unity Mini preset with compact intents and playtest evidence |
@@ -172,4 +172,4 @@ Preservar os comandos antigos durante a migração e testar instalações como c
 
 ## Próximo passo
 
-INTENT-6xlf concluído com aceite final do desenvolvedor, após revisão independente e 76 testes com 686 assertions aprovadas no Windows. A próxima entrega é INTENT-6xpb, de adapters e configuração de modelos por papel, cujo início foi autorizado. A governança deste checkout continua `standard`, por solicitação explícita do usuário.
+O INTENT-6xpb implementa os adapters Codex e Claude Code, configuração por papel e `aidlc sync`. A verificação das configurações efetivas em sessões nativas está pendente por limitações de modelo e saldo nas contas de teste. O perfil `standard` exige o aceite final do desenvolvedor.

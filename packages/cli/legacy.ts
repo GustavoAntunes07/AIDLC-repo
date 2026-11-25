@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { DEFAULT_CONFIG_YAML } from "../core/config";
+import { DEFAULT_CONFIG_YAML, loadProjectConfig } from "../core/config";
 import { inspectProject } from "../core/project";
 import { safePath } from "../core/installation";
 import { checkIntentBranch, closeIntent, createIntent, intentStatus, listIntents, nextIntent, showIntent, transitionIntent, validateProjectIntents } from "../core/intents";
@@ -12,7 +12,8 @@ export function runLegacy(argv: string[], root = process.cwd(), options: { requi
   switch (command) {
     case "setup": {
       if (args.length) throw new Error("setup does not accept arguments");
-      for (const dir of ["intents", "docs", ".codex", ".codex/agents", ".aidlc"]) mkdirSync(safePath(root, dir), { recursive: true });
+      const { harness } = loadProjectConfig(root);
+      for (const dir of ["intents", "docs", `.${harness}/agents`, ".aidlc"]) mkdirSync(safePath(root, dir), { recursive: true });
       const state = safePath(root, ".aidlc/state.json");
       if (!existsSync(state)) writeFileSync(state, JSON.stringify({ version: "1.0.0", initialized: true, created_at: new Date().toISOString() }, null, 2));
       const config = safePath(root, ".aidlc/config.yaml");

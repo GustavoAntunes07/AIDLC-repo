@@ -2,7 +2,8 @@ import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, statSync, u
 import { dirname, join } from "node:path";
 import { DEFAULT_CONFIG_YAML, loadProjectConfig } from "./config";
 import { BLOCK_END, BLOCK_START, digest, FRAMEWORK_VERSION, MANIFEST_PATH, PENDING_PATH, readManifest, safePath, USER_PATHS, type Manifest } from "./installation";
-import { INSTRUCTION_BLOCK, PROJECT_DOCUMENT } from "./payload";
+import { managedPayload } from "./payload";
+import { instructionPath, isHarness } from "./harness";
 import { inspectProject, type Diagnostic } from "./project";
 import { readUtf8Instructions } from "./encoding";
 
@@ -17,36 +18,32 @@ export function initialize(root: string, resources: Resources, options: InitOpti
   try {
     if (existsSync(safePath(root, PENDING_PATH))) throw new Error("Interrupted update pending; recover before initialization");
     if ((options.preset ?? "default") !== "default") throw new Error(`Unsupported workflow preset: ${options.preset}; Unity Mini is planned separately`);
-    if ((options.harness ?? "codex") !== "codex") throw new Error(`Unsupported harness: ${options.harness}`);
+    const harness = options.harness ?? "codex";
+    if (!isHarness(harness)) throw new Error(`Unsupported harness: ${harness}`);
     if (options.governance && !["strict", "standard", "autonomous"].includes(options.governance)) throw new Error(`Unknown governance profile: ${options.governance}`);
     const existing = readManifest(root);
     if (existing) {
       const current = loadProjectConfig(root);
+      if (options.harness && existing.harness !== harness) throw new Error("init cannot switch an installed harness");
       if (options.governance && current.governanceProfile !== options.governance) throw new Error("init cannot change governance on an existing installation; edit project configuration explicitly");
       return { ...inspectProject(root), created, existing: true };
     }
     lock = openSync(lockPath, "wx");
-    const block = INSTRUCTION_BLOCK;
-    const files = new Map<string, { content: string; kind: "file" | "block" }>([
-      [".aidlc/workflow.md", { content: resources.workflow, kind: "file" }],
-      ["AGENTS.md", { content: block, kind: "block" }],
-      [".aidlc/config.yaml", { content: DEFAULT_CONFIG_YAML.replace("governance_profile: strict", `governance_profile: ${options.governance ?? "strict"}`), kind: "file" }],
-      [".aidlc/state.json", { content: JSON.stringify({ version: "1.0.0", initialized: true, created_at: new Date().toISOString() }, null, 2) + "\n", kind: "file" }],
-    ]);
-    for (const [name, content] of Object.entries(resources.agents)) {
-      if (!/^[a-z][a-z0-9-]*\.toml$/.test(name)) throw new Error("Invalid packaged agent name");
-      files.set(`.codex/agents/${name}`, { content, kind: "file" });
-    }
+    const files = managedPayload(resources, harness);
+    const instructions = instructionPath(harness);
+    const config = DEFAULT_CONFIG_YAML.replace("harness: codex", `harness: ${harness}`).replace("governance_profile: strict", `governance_profile: ${options.governance ?? "strict"}`);
+    files.set(".aidlc/config.yaml", { content: config, kind: "file" });
+    files.set(".aidlc/state.json", { content: JSON.stringify({ version: "1.0.0", initialized: true, created_at: new Date().toISOString() }, null, 2) + "\n", kind: "file" });
     const userOwned = [...USER_PATHS];
     if (existsSync(safePath(root, "AIDLC.md"))) {
       if (!statSync(safePath(root, "AIDLC.md")).isFile()) throw new Error("Expected regular file: AIDLC.md");
       userOwned.push("AIDLC.md");
+      files.delete("AIDLC.md");
     }
-    else files.set("AIDLC.md", { content: PROJECT_DOCUMENT, kind: "file" });
 
     // Preflight every path before the first content write. Never adopt existing managed files implicitly.
     safePath(root, MANIFEST_PATH);
-    for (const dir of ["intents", "docs", ".aidlc", ".codex", ".codex/agents"]) {
+    for (const dir of ["intents", "docs", ".aidlc", `.${harness}`, `.${harness}/agents`]) {
       const path = safePath(root, dir);
       if (existsSync(path)) {
         if (!statSync(path).isDirectory()) throw new Error(`Expected directory: ${dir}`);
@@ -55,7 +52,7 @@ export function initialize(root: string, resources: Resources, options: InitOpti
     for (const [path, file] of files) {
       const absolute = safePath(root, path);
       if (!existsSync(absolute)) continue;
-      if (path === "AGENTS.md") {
+      if (path === instructions) {
         const content = readUtf8Instructions(absolute);
         if (content.includes(BLOCK_START) || content.includes(BLOCK_END)) throw new Error("Existing AIDLC instruction marker without installation manifest; inspect before adoption");
       } else throw new Error(`Refusing to overwrite existing file: ${path}; explicit legacy adoption or conflict resolution is required`);
@@ -64,7 +61,7 @@ export function initialize(root: string, resources: Resources, options: InitOpti
     for (const [path, file] of files) {
       const absolute = safePath(root, path);
       mkdirSync(dirname(absolute), { recursive: true });
-      if (path === "AGENTS.md" && existsSync(absolute)) {
+      if (path === instructions && existsSync(absolute)) {
         readUtf8Instructions(absolute);
         appendFileSync(absolute, "\n\n" + file.content + "\n");
       } else writeFileSync(absolute, file.content + (file.kind === "block" ? "\n" : ""), { flag: "wx" });
@@ -72,7 +69,7 @@ export function initialize(root: string, resources: Resources, options: InitOpti
     }
     const manifest: Manifest = {
       schemaVersion: 2, updateProtocol: 1, frameworkVersion: FRAMEWORK_VERSION, configSchemaVersion: 1,
-      preset: "default", harness: "codex", components: { preset: FRAMEWORK_VERSION, codex: FRAMEWORK_VERSION },
+      preset: "default", harness, components: { preset: FRAMEWORK_VERSION, [harness]: FRAMEWORK_VERSION },
       managed: [...files.entries()].filter(([path]) => !userOwned.includes(path)).map(([path, file]) => ({ path, kind: file.kind, sha256: digest(file.content) })), userOwned,
     };
     writeFileSync(safePath(root, MANIFEST_PATH), JSON.stringify(manifest, null, 2) + "\n", { flag: "wx" });

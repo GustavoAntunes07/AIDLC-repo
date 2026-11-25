@@ -21,7 +21,7 @@
   },
   "dependencies": {},
   "name": "aidlc",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Installable development lifecycle for coding agents",
   "private": true,
   "type": "module",

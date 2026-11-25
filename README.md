@@ -1,6 +1,6 @@
 # AIDLC
 
-A development lifecycle for coding agents, evolving from a repository template into an installable CLI and shared Core. The local package is version `0.2.0` and supports the default workflow with Codex definitions.
+A development lifecycle for coding agents, evolving from a repository template into an installable CLI and shared Core. The local package is version `0.3.0` and supports native Codex and Claude Code agent definitions with the default workflow.
 
 ## Build and install locally
 
@@ -11,7 +11,7 @@ bun install
 bun run build
 bun test
 npm pack
-npm install --global ./aidlc-0.2.0.tgz
+npm install --global ./aidlc-0.3.0.tgz
 ```
 
 The package remains private; releases are local artifacts pending manual acceptance. `npm pack` builds a local tarball; it does not publish a release. Do not use an unverified registry package with the same name.
@@ -24,21 +24,23 @@ aidlc doctor
 aidlc config
 ```
 
+For Claude Code, create the installation with `aidlc init --preset default --harness claude`. The selected harness is recorded in the installation manifest and cannot be switched by running `init` again.
+
 Or target an explicit directory:
 
 ```powershell
 aidlc --cwd "C:\projects\my game" init
 ```
 
-`init` targets exactly the current directory or `--cwd`, not an inferred parent repository. Governance defaults to `strict`. Supported governance choices are `strict`, `standard` and `autonomous`; initialization still supports only the `default` preset and `codex` harness. The lifecycle Core also supports a generic compact intent preset for projects configured explicitly.
+`init` targets exactly the current directory or `--cwd`, not an inferred parent repository. Governance defaults to `strict`. Supported governance choices are `strict`, `standard` and `autonomous`; the available installation preset is `default` and supported harnesses are `codex` and `claude`. The lifecycle Core also supports a generic compact intent preset for projects configured explicitly.
 
 ## Ownership and diagnostics
 
-Initialization preflights conflicts, preserves existing `AIDLC.md`, appends a delimited AIDLC block to `AGENTS.md`, and refuses to overwrite preexisting generated files or configuration. A valid repeated `init` makes no file changes. An existing AIDLC repository without a manifest requires future explicit adoption; it is not silently converted.
+Initialization preflights conflicts, preserves existing `AIDLC.md`, appends a delimited AIDLC block to the selected harness instruction file (`AGENTS.md` for Codex or `CLAUDE.md` for Claude Code), and refuses to overwrite preexisting generated files or configuration. A valid repeated `init` makes no file changes. An existing AIDLC repository without a manifest requires future explicit adoption; it is not silently converted.
 
-Existing `AGENTS.md` must be valid UTF-8, with an optional UTF-8 BOM. Initialization checks its encoding before writing project content and appends the managed block without rewriting the original bytes. UTF-16, invalid UTF-8 and NUL-containing instructions are refused with a conversion message; the original file remains untouched.
+An existing harness instruction file must be valid UTF-8, with an optional UTF-8 BOM. Initialization checks its encoding before writing project content and appends the managed block without rewriting the original bytes. UTF-16, invalid UTF-8 and NUL-containing instructions are refused with a conversion message; the original file remains untouched.
 
-`.aidlc/install.json` records installation schema, framework/component versions, managed paths, content hashes and user-owned state. Configuration schema version and installed framework version are separate. Configuration, intents, context, observations and external skills are user-owned; generated resources are managed. User edits outside the delimited `AGENTS.md` block do not count as managed drift.
+`.aidlc/install.json` records installation schema, framework/component versions, the selected harness, managed paths, content hashes and user-owned state. Configuration schema version and installed framework version are separate. Configuration, intents, context, observations and external skills are user-owned; generated resources are managed. User edits outside the delimited instruction block do not count as managed drift.
 
 `doctor` is read-only. It reports missing files, unsupported schema/components, malformed configuration and modified managed content. Managed drift blocks update application until the conflict is resolved; it is not overwritten automatically. A legacy project gets a no-manifest warning. User configuration changes that remain valid are allowed; `init` does not change an existing project's governance.
 
@@ -68,22 +70,22 @@ Configuration uses block mappings and block lists. Scalar values or inline array
 
 New compact intents use `id`, `title`, `type` (`feature`, `bug` or `experiment`), `status` and `branch`, with Objective, Scope, Acceptance Criteria, Plan, Validation and Review sections. They do not require story points or retry counts. A missing per-intent `schema` field always means legacy `full-v1`, even in a compact project. Existing intents are preserved without automatic conversion. Historical terminal intents remain readable; an active full-schema intent in a state unavailable in compact must be finished under the default preset or explicitly migrated before continuing in compact.
 
-The installer still accepts `init --preset default --harness codex`; generating or installing Unity Mini and harness adapters remains separate work.
+The installer supports `init --preset default --harness codex|claude`. The compact intent preset can be configured explicitly. The Unity Mini preset and Task Observer remain separate work.
 
 ## Safe updates and rollback
 
-This CLI bundles exactly target `0.2.0` and supports installed releases `0.1.0` and `0.2.0`. Updating the CLI package and upgrading each project's installed resources are separate operations. Nothing is fetched from a registry by these commands.
+This CLI bundles exactly target `0.3.0` and supports installed releases `0.1.0`, `0.2.0` and `0.3.0`. Updating the CLI package and upgrading each project's installed resources are separate operations. Nothing is fetched from a registry by these commands.
 
 ```powershell
 aidlc update --dry-run
-aidlc update --to 0.2.0
+aidlc update --to 0.3.0
 aidlc rollback <transaction-id> --dry-run
 aidlc rollback <transaction-id>
 ```
 
-Dry-run prints source/target versions, migrations and per-path actions without writing files or creating a lock. Application requires an explicit target. A locally modified or missing managed file blocks the complete application before any backup or content write. Edits outside the AGENTS.md managed block remain user-owned.
+Dry-run prints source/target versions, migrations and per-path actions without writing files or creating a lock. Application requires an explicit target. A locally modified or missing managed file blocks the complete application before any backup or content write. Edits outside the selected harness instruction block remain user-owned.
 
-The upgrade migrates installation manifest schema 1 to schema 2, adding update protocol 1 and backup ownership. Configuration schema stays at 1 and project state stays at its existing format. `aidlc migrate --to 0.2.0` runs this same bundled update/migration transaction; it is not a generic arbitrary-schema migrator. The framework checkout's legacy template has no manifest and is not implicitly adopted.
+The upgrade migrates installation manifest schema 1 to schema 2, adding update protocol 1 and backup ownership. Configuration schema stays at 1 and project state stays at its existing format. `aidlc migrate --to 0.3.0` runs this same bundled update/migration transaction; it is not a generic arbitrary-schema migrator. The framework checkout's legacy template has no manifest and is not implicitly adopted.
 
 Application creates `.aidlc/backups/<transaction-id>/snapshot.json` and a journal before changing managed content. The snapshot contains before/after managed parts and installation metadata; it does not copy configuration, intents, context, observations, decisions, assets or external skills. Content is atomically replaced and installation metadata is written last. Successful application prints the transaction ID; repeating the same update is a no-op.
 
@@ -101,9 +103,9 @@ Update locks are published as complete records using an exclusive hard link, so 
 
 Rollback restores prior managed content and manifest, including the prior schema, while leaving user-owned files and subsequent configuration edits intact. It refuses corrupted backups, unknown paths and conflicting managed edits. Backups/journals remain for inspection. This release supports process-interruption recovery; it does not claim filesystem/hardware power-loss guarantees or concurrent-editor transactional isolation. Avoid editing managed content while an update is running.
 
-Tests include the actual archived 0.1.0 package, abrupt child-process exits before and after installation metadata, idempotency, rollback conflicts and a consumer installed from the 0.2.0 tarball. Windows/Node 24.11.1 is the validated runtime; the wider Node >=22/platform matrix remains pending CI coverage.
+Tests include the actual archived 0.1.0 package, abrupt child-process exits before and after installation metadata, idempotency, rollback conflicts and a consumer installed from the 0.3.0 tarball. Windows/Node 24.11.1 is the validated runtime; the wider Node >=22/platform matrix remains pending CI coverage.
 
-## Models
+## Harness adapters and models
 
 New installations generate these Codex definitions:
 
@@ -115,8 +117,25 @@ New installations generate these Codex definitions:
 | Routine Reviewer | `gpt-6.2-sol` | `high` |
 | Documenter | `gpt-6-luna` | `high` |
 
-The workflow reserves `gpt-6.2-astra` at `high` for high-risk or unresolved review questions. It does not generate an always-running specialist agent or automatically switch models. Existing definitions in the framework checkout are not modified by package initialization tests. Generated files express intended configuration, not evidence that a particular model executed work. Runtime dispatch, model overrides and availability checks belong to the adapter intent.
+The workflow reserves `gpt-6.2-astra` at `high` for high-risk or unresolved review questions. It does not generate an always-running specialist agent or automatically switch models. Claude Code uses native agent Markdown under `.claude/agents/`, with Haiku for orchestration, reading and documentation, Sonnet for planning, implementation, tests and routine review, and Opus for explicit specialist review. Project role overrides live in the user-owned `.aidlc/config.yaml`:
+
+```yaml
+role_models:
+  planner:
+    model: "opus"
+    reasoning: "high"
+```
+
+Use `aidlc sync --dry-run` to preview changes to generated role files and `aidlc sync` to apply them. Sync is idempotent, preserves user configuration, intents, local instruction text and external skills, and reports conflicts for edited or missing managed files. It uses the transaction backup and rollback path shared with updates. Because project configuration is user-owned, sync reads the valid role overrides currently saved there. Use `aidlc update --dry-run` and the explicit `aidlc update --to 0.3.0` to update framework resources.
+
+`aidlc harness` prints requested role bindings and their agent paths. Use `--role planner` to inspect one role or `--specialist` to prepare an explicit specialist reviewer definition. Add `--model <id>` and `--reasoning <effort>` to render an override for a separate task context. The command reports runtime as `unverified`. Use the target harness's model catalog and effective session settings to verify model availability and execution. Codex CLI 0.159.2 rejected Sol 6.2 with the account used for validation. Claude Code 2.1.94 discovered all seven generated roles, and its runtime probe stopped at the account credit limit.
+
+Run review in an independent context. Selecting a reviewer model does not establish an independent context, and an unavailable reviewer remains pending instead of self-approving.
 
 ## Next milestones
 
 The roadmap lives at `docs/aidlc-cli-roadmap.md` in the source repository. Local safe updates/migrations and shared lifecycle with generic compact schema support are complete following validation, independent review and final acceptance. Adapters, Task Observer, Unity Mini, context/resume and multi-project inventory remain planned. Unity skills will be supplied separately by the user. No game project or global skill installation is modified by this bootstrap.
+
+Version 0.3.0 records the adapter compatibility boundary. Earlier CLIs reject its installation manifest. Upgrade older installations with this CLI before using sync. Role model values support quoted strings. Put YAML comments on their own lines. Inline comments after unquoted role model values are rejected before writes.
+
+Runtime validation used project overrides resolved by `aidlc harness` and explicitly passed to separate read-only Codex CLI sessions. Native session logs confirmed gpt-6.1-sol with high and medium effort, and both sessions completed successfully. Sol 6.2 and Claude inference remain deferred.

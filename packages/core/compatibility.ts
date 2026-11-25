@@ -14,7 +14,11 @@ export function compatibilityErrors(root: string, options: { allowMissingConfig?
       : `Abandoned update lock ${lock.id}; recover with aidlc update --recover ${lock.id}`];
     const manifest = readManifest(root);
     const configPath = safePath(root, ".aidlc/config.yaml");
-    if (existsSync(configPath)) errors.push(...configErrors(loadProjectConfig(root)));
+    if (existsSync(configPath)) {
+      const config = loadProjectConfig(root);
+      errors.push(...configErrors(config));
+      if (manifest && manifest.harness !== config.harness) errors.push(`Configured harness ${config.harness} differs from installed harness ${manifest.harness}; revert the harness setting`);
+    }
     else if (!options.allowMissingConfig || manifest) errors.push("Missing .aidlc/config.yaml; run aidlc init or complete legacy setup before changing the project");
 
     const statePath = safePath(root, ".aidlc/state.json");

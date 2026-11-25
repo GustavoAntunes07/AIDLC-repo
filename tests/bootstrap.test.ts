@@ -156,7 +156,7 @@ describe("installable bootstrap", () => {
   test("fresh installation works with explicit cwd and generates a versioned manifest", () => {
     expect(cli(["--cwd", workspace, "init"], built, repo).code).toBe(0);
     const manifest = JSON.parse(readFileSync(join(workspace, ".aidlc/install.json"), "utf8"));
-    expect(manifest.frameworkVersion).toBe("0.2.0");
+    expect(manifest.frameworkVersion).toBe("0.3.0");
     expect(manifest.configSchemaVersion).toBe(1);
     expect(manifest.managed.find((f: any) => f.path === "AGENTS.md").kind).toBe("block");
     expect(manifest.userOwned).toContain(".aidlc/observations/");
@@ -172,7 +172,7 @@ describe("installable bootstrap", () => {
     expect(snapshot(workspace)).toEqual(before);
   });
   test("unknown presets, harnesses, options and governance do not create files", () => {
-    for (const args of [["--preset", "unity-mini"], ["--harness", "claude"], ["--governance", "surprise"], ["--overwrite", "true"]]) {
+    for (const args of [["--preset", "unity-mini"], ["--harness", "unknown-harness"], ["--governance", "surprise"], ["--overwrite", "true"]]) {
       expect(cli(["init", ...args]).code).toBe(1);
       expect(readdirSync(workspace)).toEqual([]);
     }
@@ -278,7 +278,7 @@ describe("installable bootstrap", () => {
     const project = join(workspace, "game project");
     mkdirSync(project);
     const entry = join(install, "node_modules/aidlc/dist/aidlc.js");
-    expect(cli(["--version"], entry, project).text.trim()).toBe("0.2.0");
+    expect(cli(["--version"], entry, project).text.trim()).toBe("0.3.0");
     expect(cli(["init"], entry, project).code).toBe(0);
     expect(cli(["doctor"], entry, project).code).toBe(0);
     expect(cli(["intent", "new", "Packaged lifecycle"], entry, project).code).toBe(0);
@@ -298,7 +298,7 @@ describe("installable bootstrap", () => {
     expect(existsSync(join(install, "node_modules/.bin", process.platform === "win32" ? "aidlc.cmd" : "aidlc"))).toBe(true);
     const shim = npm(["exec", "--offline", "--", "aidlc", "--version"], install);
     expect(shim.status).toBe(0);
-    expect(shim.stdout.trim()).toBe("0.2.0");
+    expect(shim.stdout.trim()).toBe("0.3.0");
     const previous = join(workspace, "previous package");
     mkdirSync(previous);
     expect(spawnSync("tar", ["-xzf", join(repo, "tests/fixtures/aidlc-0.1.0.tgz"), "-C", previous]).status).toBe(0);
@@ -306,7 +306,7 @@ describe("installable bootstrap", () => {
     mkdirSync(upgradeProject);
     expect(cli(["init"], join(previous, "package/dist/aidlc.js"), upgradeProject).code).toBe(0);
     expect(cli(["update", "--dry-run"], entry, upgradeProject).code).toBe(0);
-    const upgraded = cli(["update", "--to", "0.2.0"], entry, upgradeProject);
+    const upgraded = cli(["update", "--to", "0.3.0"], entry, upgradeProject);
     expect(upgraded.code).toBe(0);
     const transaction = JSON.parse(upgraded.text);
     expect(cli(["doctor"], entry, upgradeProject).code).toBe(0);

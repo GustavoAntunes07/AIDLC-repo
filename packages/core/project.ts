@@ -3,7 +3,8 @@ import { join, resolve } from "node:path";
 import { configErrors, loadProjectConfig } from "./config";
 import { validateProjectIntents } from "./intents";
 export { field, section, validateProjectIntents } from "./intents";
-import { inspectInstallation } from "./installation";
+import { inspectInstallation, readManifest } from "./installation";
+import { agentPath, instructionPath, isHarness } from "./harness";
 
 export type Diagnostic = { errors: string[]; warnings: string[] };
 
@@ -15,21 +16,23 @@ export function discoverProject(start: string): string {
 export function inspectProject(root: string, options: { intents?: boolean } = {}): Diagnostic {
   const result: Diagnostic = { errors: [], warnings: [] };
   try {
-    for (const path of ["AGENTS.md", "AIDLC.md", ".aidlc/config.yaml", ".aidlc/state.json"]) {
+    const config = existsSync(join(root, ".aidlc/config.yaml")) ? loadProjectConfig(root) : undefined;
+    const harness = isHarness(config?.harness) ? config.harness : "codex";
+    for (const path of [instructionPath(harness), "AIDLC.md", ".aidlc/config.yaml", ".aidlc/state.json"]) {
       const absolute = join(root, path);
       if (!existsSync(absolute)) result.errors.push(`Missing file: ${path}`);
       else if (!lstatSync(absolute).isFile()) result.errors.push(`Expected regular file: ${path}`);
     }
-    for (const path of ["intents", "docs", ".codex/agents"]) {
+    for (const path of ["intents", "docs", `.${harness}/agents`]) {
       if (!existsSync(join(root, path))) result.errors.push(`Missing directory: ${path}`);
       else if (!lstatSync(join(root, path)).isDirectory()) result.errors.push(`Expected directory: ${path}`);
     }
-    if (existsSync(join(root, ".aidlc/config.yaml"))) {
-      const config = loadProjectConfig(root);
+    if (config) {
       result.errors.push(...configErrors(config));
       for (const agent of config.requiredAgents) {
         if (!/^[a-z][a-z0-9-]*$/.test(agent)) continue;
-        if (!existsSync(join(root, ".codex/agents", agent + ".toml"))) result.errors.push(`Missing required agent: .codex/agents/${agent}.toml`);
+        const path = agentPath(harness, agent);
+        if (!existsSync(join(root, path))) result.errors.push(`Missing required agent: ${path}`);
       }
       if (options.intents !== false) result.errors.push(...validateProjectIntents(root, config));
     }
@@ -40,6 +43,10 @@ export function inspectProject(root: string, options: { intents?: boolean } = {}
     const install = inspectInstallation(root);
     result.errors.push(...install.errors);
     result.warnings.push(...install.warnings);
+    if (config && !install.errors.length) {
+      const manifest = readManifest(root);
+      if (manifest && manifest.harness !== config.harness) result.errors.push(`Configured harness ${config.harness} differs from installed harness ${manifest.harness}; revert the harness setting`);
+    }
   } catch (error) { result.errors.push(error instanceof Error ? error.message : String(error)); }
   return result;
 }

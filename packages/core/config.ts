@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { bindingErrors, isHarness, ROLE_NAMES, type RoleBinding } from "./harness";
 export type IntentStatus =
   | "backlog"
   | "context_ready"
@@ -16,6 +17,7 @@ export type AidlcConfig = {
   workflowPreset: string;
   intentSchema: string;
   harness: string;
+  roleBindings: Record<string, RoleBinding>;
   governanceProfile: string;
   validationCommands: string[];
   requiredAgents: string[];
@@ -76,6 +78,7 @@ export const DEFAULT_CONFIG: AidlcConfig = {
   workflowPreset: "default",
   intentSchema: "full-v1",
   harness: "codex",
+  roleBindings: {},
   governanceProfile: "strict",
   validationCommands: ["bun aidlc:doctor"],
   requiredAgents: [
@@ -217,6 +220,7 @@ function pathFor(indentPaths: Map<number, string>, indent: number) {
 export function parseConfigYaml(content: string): AidlcConfig {
   const config: AidlcConfig = {
     ...DEFAULT_CONFIG,
+    roleBindings: {},
     validationCommands: [...DEFAULT_CONFIG.validationCommands],
     requiredAgents: [...DEFAULT_CONFIG.requiredAgents],
     approvalGates: Object.fromEntries(
@@ -285,6 +289,8 @@ export function parseConfigYaml(content: string): AidlcConfig {
         const from = parent.split(".")[2];
         if (!isIntentStatus(from) || !isIntentStatus(value)) throw new Error(`Invalid lifecycle transition: ${from} -> ${value}`);
         config.transitions[from].push(value);
+      } else if (parent === "role_models" || parent.startsWith("role_models.")) {
+        throw new Error(`Configuration ${parent} requires mapping syntax`);
       }
 
       continue;
@@ -302,11 +308,30 @@ export function parseConfigYaml(content: string): AidlcConfig {
     indentPaths.set(indent, key);
 
     const blockPath = ["branches", "review", "validation", "validation.commands", "agents", "agents.required", "governance_profiles", "lifecycle", "lifecycle.terminal_statuses", "lifecycle.transitions"].includes(fullPath)
+      || fullPath === "role_models" || /^role_models\.[^.]+$/.test(fullPath)
       || /^governance_profiles\.[^.]+(?:\.approval_gates)?$/.test(fullPath)
       || /^lifecycle\.transitions\.[^.]+$/.test(fullPath);
     if (blockPath && value) throw new Error(`Configuration ${fullPath} requires block syntax; scalar and inline values are unsupported`);
     if (["workflow_preset", "intent_schema", "harness", "governance_profile"].includes(fullPath) && !value) throw new Error(`Missing configuration value: ${fullPath}`);
     if (fullPath.startsWith("lifecycle.transitions.") && !isIntentStatus(fullPath.split(".")[2])) throw new Error(`Invalid lifecycle transition state: ${key}`);
+    if (fullPath.startsWith("role_models.")) {
+      const [, role, setting, ...extra] = fullPath.split(".");
+      if (!ROLE_NAMES.includes(role)) throw new Error(`Unsupported role binding: ${role}`);
+      if (setting !== undefined) {
+        if (extra.length || !["model", "reasoning"].includes(setting) || !value) throw new Error(`Invalid role model setting: ${fullPath}`);
+        let parsed = value;
+        if (value.startsWith('"')) {
+          try { parsed = JSON.parse(value); } catch { throw new Error(`Invalid quoted role model setting: ${fullPath}`); }
+        } else if (value.startsWith("'")) {
+          if (!/^'(?:[^']|'')*'$/.test(value)) throw new Error(`Invalid quoted role model setting: ${fullPath}`);
+          parsed = value.slice(1, -1).replaceAll("''", "'");
+        } else if (/^[\[\]{}]/.test(value)) throw new Error(`Invalid role model setting: ${fullPath}`);
+        else if (/^#|\s#/.test(value)) throw new Error(`Inline comments are unsupported in ${fullPath}; put the comment on its own line or quote the value`);
+        if (typeof parsed !== "string") throw new Error(`Invalid role model setting: ${fullPath}`);
+        config.roleBindings[role] ??= {};
+        config.roleBindings[role][setting as keyof RoleBinding] = parsed;
+      }
+    }
     if (!value) continue;
 
     if (fullPath === "version") { hasVersion = true; config.schemaVersion = Number(value); }
@@ -358,7 +383,8 @@ export function configErrors(config: AidlcConfig): string[] {
   try { preset = workflowPreset(config.workflowPreset); }
   catch (error) { errors.push((error as Error).message); return errors; }
   if (config.intentSchema !== preset.schema) errors.push(`Unsupported intent schema ${config.intentSchema} for workflow preset ${config.workflowPreset}; expected ${preset.schema}`);
-  if (config.harness !== "codex") errors.push(`Unsupported harness: ${config.harness}`);
+  if (!isHarness(config.harness)) errors.push(`Unsupported harness: ${config.harness}`);
+  else for (const [role, binding] of Object.entries(config.roleBindings)) errors.push(...bindingErrors(config.harness, role, binding));
   if (!config.approvalGates[config.governanceProfile]) errors.push(`Unknown governance profile: ${config.governanceProfile}`);
   if (!Number.isInteger(config.maxReviewCycles) || config.maxReviewCycles < 1) errors.push("review.max_cycles must be a positive integer");
   for (const agent of config.requiredAgents) {
