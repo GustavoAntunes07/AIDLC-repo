@@ -38,7 +38,6 @@ afterEach(() => {
   // workspace is an absolute, unique temporary child; never remove an input project.
   if (workspace && resolve(workspace).startsWith(resolve(tmpdir()) + (process.platform === "win32" ? "\\" : "/"))) rmSync(workspace, { recursive: true, force: true });
 });
-
 describe("installable bootstrap", () => {
   test("unsupported instruction encodings fail preflight without changing any bytes", () => {
     const text = "# Instruções\r\nNão remover estas regras.\r\n";
@@ -156,7 +155,7 @@ describe("installable bootstrap", () => {
   test("fresh installation works with explicit cwd and generates a versioned manifest", () => {
     expect(cli(["--cwd", workspace, "init"], built, repo).code).toBe(0);
     const manifest = JSON.parse(readFileSync(join(workspace, ".aidlc/install.json"), "utf8"));
-    expect(manifest.frameworkVersion).toBe("0.2.0");
+    expect(manifest.frameworkVersion).toBe("0.4.0");
     expect(manifest.configSchemaVersion).toBe(1);
     expect(manifest.managed.find((f: any) => f.path === "AGENTS.md").kind).toBe("block");
     expect(manifest.userOwned).toContain(".aidlc/observations/");
@@ -172,7 +171,7 @@ describe("installable bootstrap", () => {
     expect(snapshot(workspace)).toEqual(before);
   });
   test("unknown presets, harnesses, options and governance do not create files", () => {
-    for (const args of [["--preset", "unity-mini"], ["--harness", "claude"], ["--governance", "surprise"], ["--overwrite", "true"]]) {
+    for (const args of [["--preset", "unity-mini"], ["--harness", "unknown-harness"], ["--governance", "surprise"], ["--overwrite", "true"]]) {
       expect(cli(["init", ...args]).code).toBe(1);
       expect(readdirSync(workspace)).toEqual([]);
     }
@@ -271,6 +270,8 @@ describe("installable bootstrap", () => {
     const info = JSON.parse(packed.stdout)[0];
     expect(info.files.some((f: any) => f.path === "dist/aidlc.js")).toBe(true);
     expect(info.files.some((f: any) => f.path.startsWith("intents/"))).toBe(false);
+    expect(info.files.some((f: any) => f.path === "resources/observer-attribution.md")).toBe(true);
+    expect(info.files.some((f: any) => f.path === "resources/CC-BY-4.0.txt")).toBe(true);
     const install = join(workspace, "consumer");
     mkdirSync(install);
     const result = npm(["install", "--offline", "--ignore-scripts", "--no-audit", "--no-fund", join(workspace, info.filename)], install);
@@ -278,13 +279,29 @@ describe("installable bootstrap", () => {
     const project = join(workspace, "game project");
     mkdirSync(project);
     const entry = join(install, "node_modules/aidlc/dist/aidlc.js");
-    expect(cli(["--version"], entry, project).text.trim()).toBe("0.2.0");
+    expect(cli(["--version"], entry, project).text.trim()).toBe("0.4.0");
     expect(cli(["init"], entry, project).code).toBe(0);
+    expect(cli(["doctor"], entry, project).code).toBe(0);
+    const observerStatus = JSON.parse(cli(["observer", "status"], entry, project).text);
+    expect(observerStatus).toMatchObject({ enabled: false, mode: "session-guided", automaticHooks: "unavailable" });
+    expect(cli(["intent", "new", "Packaged lifecycle"], entry, project).code).toBe(0);
+    const fullIntent = readdirSync(join(project, "intents"))[0];
+    expect(JSON.parse(cli(["intent", "show", fullIntent], entry, project).text).schema).toBe("full-v1");
+    expect(cli(["intent", "list"], entry, project)).toEqual(cli(["list"], entry, project));
+    // Config and intents remain user-owned; compact Core use does not convert full history.
+    const preserved = readFileSync(join(project, "intents", fullIntent), "utf8");
+    writeFileSync(join(project, ".aidlc/config.yaml"), "version: 1\nworkflow_preset: compact\ngovernance_profile: standard\n");
+    expect(cli(["intent", "new", "Packaged compact bug", "--type", "bug"], entry, project).code).toBe(0);
+    const compactIntent = readdirSync(join(project, "intents")).find(file => file !== fullIntent)!;
+    const compactRecord = JSON.parse(cli(["intent", "show", compactIntent], entry, project).text);
+    expect(compactRecord.schema).toBe("compact-v1");
+    expect(compactRecord.content).toContain("type: bug");
+    expect(readFileSync(join(project, "intents", fullIntent), "utf8")).toBe(preserved);
     expect(cli(["doctor"], entry, project).code).toBe(0);
     expect(existsSync(join(install, "node_modules/.bin", process.platform === "win32" ? "aidlc.cmd" : "aidlc"))).toBe(true);
     const shim = npm(["exec", "--offline", "--", "aidlc", "--version"], install);
     expect(shim.status).toBe(0);
-    expect(shim.stdout.trim()).toBe("0.2.0");
+    expect(shim.stdout.trim()).toBe("0.4.0");
     const previous = join(workspace, "previous package");
     mkdirSync(previous);
     expect(spawnSync("tar", ["-xzf", join(repo, "tests/fixtures/aidlc-0.1.0.tgz"), "-C", previous]).status).toBe(0);
@@ -292,7 +309,7 @@ describe("installable bootstrap", () => {
     mkdirSync(upgradeProject);
     expect(cli(["init"], join(previous, "package/dist/aidlc.js"), upgradeProject).code).toBe(0);
     expect(cli(["update", "--dry-run"], entry, upgradeProject).code).toBe(0);
-    const upgraded = cli(["update", "--to", "0.2.0"], entry, upgradeProject);
+    const upgraded = cli(["update", "--to", "0.4.0"], entry, upgradeProject);
     expect(upgraded.code).toBe(0);
     const transaction = JSON.parse(upgraded.text);
     expect(cli(["doctor"], entry, upgradeProject).code).toBe(0);

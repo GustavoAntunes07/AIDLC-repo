@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { closeSync, existsSync, fsyncSync, linkSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { digest, MANAGED_PATHS, MANIFEST_PATH, ownedBlock, pendingTransactionId, PENDING_PATH, processExists, readManifest, readUpdateLock, safePath, TRANSACTION_ID, UPDATE_LOCK_PATH, type UpdateLock } from "./installation";
+import { digest, MANIFEST_PATH, ownedBlock, pendingTransactionId, PENDING_PATH, processExists, readManifest, readUpdateLock, safePath, TRANSACTION_ID, UPDATE_LOCK_PATH, type UpdateLock } from "./installation";
 import { readUtf8Instructions } from "./encoding";
 import { compatibilityErrors } from "./compatibility";
 
@@ -74,7 +74,7 @@ function writePart(root: string, change: Change, expected: string, target: strin
   const current = readPart(root, change);
   if (current !== expected) throw new Error(`Concurrent managed edit: ${change.path}`);
   const content = change.kind === "block"
-    ? readUtf8Instructions(safePath(root, change.path)).replace(current, target)
+    ? readUtf8Instructions(safePath(root, change.path)).replace(current, () => target)
     : target;
   atomicWrite(root, change.path, content);
 }
@@ -119,9 +119,12 @@ function readBackup(root: string, id: string): { snapshot: Snapshot; journal: Jo
   if (journal?.schemaVersion !== 1 || journal.id !== id || journal.snapshotHash !== digest(raw) || !["prepared", "applying", "applied", "rolling_back", "rolled_back"].includes(journal.state) || !Number.isInteger(journal.completed)) throw new Error("Invalid transaction journal or snapshot hash");
   const snapshot = JSON.parse(raw);
   if (snapshot?.schemaVersion !== 1 || snapshot.id !== id || snapshot.project !== realpathSync(root) || !Array.isArray(snapshot.changes) || snapshot.changes.length < 1) throw new Error("Invalid backup or project identity");
+  const manifest = readManifest(root);
+  if (!manifest) throw new Error("Cannot recover a backup without an installation manifest");
+  const owned = new Map(manifest.managed.map(entry => [entry.path, entry.kind]));
   const seen = new Set();
   for (const change of snapshot.changes) {
-    if (typeof change?.path !== "string" || !["file", "block"].includes(change.kind) || typeof change.before !== "string" || typeof change.after !== "string" || seen.has(change.path) || (change.path === MANIFEST_PATH ? change.kind !== "file" : MANAGED_PATHS.get(change.path) !== change.kind)) throw new Error("Invalid backup entry");
+    if (typeof change?.path !== "string" || !["file", "block"].includes(change.kind) || typeof change.before !== "string" || typeof change.after !== "string" || seen.has(change.path) || (change.path === MANIFEST_PATH ? change.kind !== "file" : owned.get(change.path) !== change.kind)) throw new Error("Invalid backup entry");
     safePath(root, change.path);
     seen.add(change.path);
   }

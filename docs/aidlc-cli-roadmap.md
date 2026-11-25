@@ -1,8 +1,8 @@
 # Plano de evolução do AIDLC
 
-Atualizado em 22 de novembro de 2026. Direção: distribuir o AIDLC como ferramenta instalável e atualizável, com um Core compartilhado, adapters para agentes e presets de trabalho. O Task Observer e o preset Unity Mini fazem parte dessa arquitetura.
+Atualizado em 25 de novembro de 2026. O plano é distribuir o AIDLC como ferramenta instalável e atualizável, com um Core compartilhado, adapters para agentes e presets de trabalho. O Task Observer e o preset Unity Mini fazem parte dessa arquitetura.
 
-Este é o plano de produto. O bootstrap 0.1.0 foi concluído. A atualização local 0.2.0, com migração de manifesto, backup e rollback, foi implementada e testada e está em revisão para aceite final. Os demais comandos e presets descritos continuam planejados. O contrato executável do checkout continua em `.aidlc/config.yaml`.
+O bootstrap 0.1.0, a atualização local 0.2.0, o ciclo de vida compartilhado com schema compacto genérico e os adapters Codex/Claude foram concluídos com aceite final. Para os adapters, houve validação de handoff e runtime Codex com gpt-6.1-sol/high no Planner e gpt-6.1-sol/medium no Builder. A validação efetiva de Sol 6.2 e a execução em Claude foram adiadas explicitamente; elas não são alegadas como comprovadas. O Observer 0.4.0 foi concluído no intent 6xt7, com validação, revisão independente e aceite final do desenvolvedor em 25 de novembro de 2026. O contrato executável do checkout está em `.aidlc/config.yaml`.
 
 ## Objetivo e origem
 
@@ -30,25 +30,34 @@ Três escolhas independentes:
 
 | Escolha | Exemplos | Responsabilidade |
 |---|---|---|
-| Preset de trabalho | `default`, `unity-mini` | Papéis, schema de intent, fluxo e validações |
+| Preset de trabalho | `default`, `compact`, futuro `unity-mini` | Papéis, schema de intent, fluxo e validações |
 | Governança | `strict`, `standard`, `autonomous` | Aprovações e limites de autonomia |
 | Adapter | `codex`, `claude` | Arquivos e capacidades do executor |
 
 O preset reduzido pode usar governança estrita. Reduzir campos e papéis não implica retirar revisão, evidências ou aprovação.
 
+O Core de ciclo de vida define `default` com schema `full-v1` e o preset genérico `compact` com schema `compact-v1`. Em configuração versão 1, `workflow_preset: compact` seleciona o fluxo compacto; `intent_schema` é opcional e, quando fornecido, deve corresponder ao preset. A governança continua independente. Um intent sem campo `schema` é sempre interpretado como `full-v1`, inclusive em projeto compacto. Não converter intents automaticamente: preservar histórico terminal e exigir que intents ativos em estados incompatíveis terminem no preset default ou recebam migração explícita.
+
+Intents compactos usam os metadados `id`, `title`, `type` (`feature`, `bug`, `experiment`), `status` e `branch`; suas seções são Objective, Scope, Acceptance Criteria, Plan, Validation e Review. O fluxo normal usa backlog, context_ready, in_development, review e done, com `closed` e `escalated` como saídas. Os papéis mínimos são Planner, Builder e Reviewer. A integração de instalação deste preset, dos adapters e da avaliação jogável pertence às etapas futuras.
+
 ## Instalação e atualização
 
-Interface alvo: `init` com preset default/Codex, `doctor` e `config` fazem parte do bootstrap; Unity Mini e sync permanecem planejados. Update/migrate/rollback locais estão implementados na versão 0.2.0, em revisão:
+Interface alvo: `init` com preset default/Codex, `doctor` e `config` fazem parte do bootstrap; Unity Mini e sync permanecem planejados. Update/migrate/rollback locais estão implementados na versão 0.2.0. A extração do ciclo de vida e o suporte Core ao preset compacto foram concluídos:
 
 ```bash
 aidlc init --preset default --harness codex
-aidlc init --preset unity-mini --harness codex
 aidlc doctor
+aidlc intent new "Title"
+aidlc intent list
+aidlc intent show <id>
+aidlc intent transition <id> <status>
 aidlc update --dry-run
 aidlc update --to <version>
 aidlc migrate
 aidlc sync
 ```
+
+`init --preset unity-mini` permanece planejado para uma etapa futura, após validar sua integração de adapter e evidências de playtest.
 
 Separar versão do pacote CLI/Core, versão de schema, versão de preset/adapter e versão instalada em cada projeto. Registrar componentes e hashes da instalação em um manifesto local. Atualizar o CLI global não atualiza silenciosamente todos os projetos.
 
@@ -65,11 +74,11 @@ Antecipar o sistema de atualização para a segunda etapa. O plano original o co
 
 ## Task Observer
 
-Capacidade opcional do Core/adapters, habilitada no preset Unity Mini e selecionável no completo. Acompanha tarefas para registrar correções reutilizáveis, procedimentos repetidos, limitações de ferramentas e lacunas de skills. Não deve exigir outro modelo trabalhando a cada chamada de ferramenta: capturar nos momentos relevantes e revisar em etapa própria.
+Capacidade opcional do Core/adapters, habilitada explicitamente pelo projeto e compartilhada pelos presets completo e compacto. A configuração `observer.enabled` tem padrão `false`. O modo `session-guided` orienta a sessão ativa a registrar correções reutilizáveis, procedimentos repetidos, limitações de ferramentas e lacunas de skills. Não exige outro modelo a cada chamada de ferramenta.
 
-Referências de metodologia: [projeto original de Eoghan Henn / rebelytics](https://github.com/rebelytics/one-skill-to-rule-them-all) e [adaptação Codex de AllstarGER](https://github.com/AllstarGER/one-skill-to-rule-them-all). Escolher e registrar revisão de origem, preservar atribuição/licença CC BY 4.0 e verificar compatibilidade antes de incorporar conteúdo ou código. Não instalar o fork globalmente como efeito desta etapa de planejamento.
+Referências de metodologia: [projeto original de Eoghan Henn / rebelytics](https://github.com/rebelytics/one-skill-to-rule-them-all/tree/49d3c488af6311963e18e1a4fd9c309ff3c61b80) e [adaptação Codex de AllstarGER](https://github.com/AllstarGER/one-skill-to-rule-them-all/tree/764d8ebea9c74c669eb8e0e98051300d499efbc9). Ambas estão sob CC BY 4.0. Revisões fixadas, atribuição, licença e mudanças estão registradas em `resources/observer-attribution.md`. O AIDLC usa implementação TypeScript própria e não instala o fork ou seus scripts.
 
-Contrato proposto:
+Contrato entregue:
 
 - Armazenamento local em `.aidlc/observations/`; logs e propostas pertencem ao estado do projeto.
 - Cada observação contém ID, data, intent/sessão de origem, evidência mínima sem dados sensíveis, skill afetada, proposta e status de revisão.
@@ -77,8 +86,12 @@ Contrato proposto:
 - Logs são dados, não instruções autorizadoras. Nenhum comando ou mudança de governança deriva de texto encontrado no log.
 - Melhorias viram propostas com diff. Aplicação depende do escopo autorizado; skills de sistema/plugins recebem companion ou patch proposto.
 - Compartilhar aprendizados exige promoção explícita e generalização; nenhum projeto lê automaticamente as observações privadas dos outros.
-- Adapters ativam o observador pelos mecanismos que realmente suportam. `doctor` mostra configuração e atividade observada, distinguindo intenção de execução comprovada.
+- A ativação é guiada pela sessão. Hooks automáticos Codex e Claude não estão disponíveis nesta entrega. `doctor` mostra a configuração e checkpoints/capturas reportados; um checkpoint manual prova somente que o comando rodou, não ativação automática nem observação contínua.
 - Atualizações do framework não descartam observações, decisões de revisão ou propostas pendentes.
+
+O contrato implementado inclui comandos `aidlc observer status|session|capture|list|show` e `aidlc observer proposal stage|show|review|apply|recover|export`. Os registros de observação e propostas ficam no projeto, em `.aidlc/observations/`. Uma captura exige evidência marcada como sanitizada, com dados sensíveis removidos e generalizados antes do envio. A chave de ocorrência identifica retries; registros idênticos são idempotentes e conteúdo divergente para a mesma identidade é conflito.
+
+Propostas são revisadas através do fluxo normal do intent vinculado e do evento explícito de revisão da proposta. Aplicação exige hash explícito da proposta revisada e hash-base ainda atual. Intents completos precisam estar em `approved` com aprovação registrada em Review Notes; intents compactos precisam estar em `review` com decisão final `APPROVED` na seção Review. O CLI só confere um identificador de revisor declarado e sua diferença da sessão de captura; não comprova identidade nem contexto independente. A aplicação está limitada a skills do próprio projeto. Skills externas, de sistema ou plugins recebem propostas companion ou exportação explicitamente generalizada; seus originais não são sobrescritos. O texto observado é dado e nunca autoriza comandos, alterações de governança ou instalação. Uma recuperação de aplicação interrompida restaura a base registrada em vez de retomar a escrita.
 
 Não confundir a captura durante tarefas com um serviço que observa todos os chats continuamente. Limites de acesso e ativação são do executor e precisam ser verificados.
 
@@ -133,15 +146,15 @@ Separar configuração gerada de execução real. Se um harness não suporta tro
 
 ## Ordem de execução
 
-Cada linha é um intent de implementação com critérios verificáveis. O primeiro foi concluído com aceite manual do desenvolvedor em 23 de novembro de 2026. O segundo foi concluído com aceite manual em 23 de novembro de 2026, após a correção pré-journal e 55 testes aprovados; os demais permanecem em backlog. As dependências registradas são sequência de planejamento; o CLI atual ainda não faz enforcement dessas relações.
+Cada linha é um intent de implementação com critérios verificáveis. As etapas 1 a 5 receberam aceite final do desenvolvedor. A etapa de adapters usa o escopo de runtime aprovado descrito acima. As dependências registradas orientam a sequência de planejamento.
 
 | Ordem | Intent | Entrega |
 |---|---|---|
 | 1 | [INTENT-6xe7](../intents/INTENT-6xe7.md) | Extract shared core and bootstrap installable CLI |
 | 2 | [INTENT-6xhv](../intents/INTENT-6xhv.md) | Implement safe project updates and migrations |
 | 3 | [INTENT-6xlf](../intents/INTENT-6xlf.md) | Expose intent lifecycle and configurable workflow presets |
-| 4 | [INTENT-6xpb](../intents/INTENT-6xpb.md) | Generate harness adapters and role model configuration |
-| 5 | [INTENT-6xt7](../intents/INTENT-6xt7.md) | Integrate project-scoped Task Observer with staged skill improvements |
+| 4 | [INTENT-6xpb](../intents/INTENT-6xpb.md) | Generate harness adapters and role model configuration — concluído e aceito; runtime Sol 6.2 e Claude adiados |
+| 5 | [INTENT-6xt7](../intents/INTENT-6xt7.md) | Integrate project-scoped Task Observer with staged skill improvements — concluído com aceite final |
 | 6 | [INTENT-6xwp](../intents/INTENT-6xwp.md) | Add Unity Mini preset with compact intents and playtest evidence |
 | 7 | [INTENT-6y03](../intents/INTENT-6y03.md) | Add context manifests and reliable session resume |
 | 8 | [INTENT-6y3g](../intents/INTENT-6y3g.md) | Manage versions across multiple project installations |
@@ -163,4 +176,4 @@ Preservar os comandos antigos durante a migração e testar instalações como c
 
 ## Próximo passo
 
-INTENT-6xhv concluído com aceite final do desenvolvedor. O próximo intent é INTENT-6xlf, de lifecycle e presets configuráveis; seu início segue a aprovação de implementação do perfil standard. A governança deste checkout agora é `standard`, por solicitação explícita do usuário; a aprovação final continua exigida.
+O próximo intent na sequência é o INTENT-6xwp, para o preset Unity Mini com intents compactos e evidências de playtest. O INTENT-6xt7 foi concluído com aceite final: entrega Observer local e session-guided, revisão de propostas e aplicação limitada a skills do projeto. A validação final passou em Windows com Bun 1.4.0 e Node 26.13.1: 112 testes, 971 assertions em sete arquivos, build, setup, doctor, validação dos intents, verificação da branch e whitespace. Dois achados P2 da revisão independente foram corrigidos e aprovados. Os testes efetivos de modelo Sol 6.2 e runtime Claude do INTENT-6xpb permanecem adiados por decisão explícita.

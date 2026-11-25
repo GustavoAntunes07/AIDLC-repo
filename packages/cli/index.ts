@@ -6,15 +6,34 @@ import { FRAMEWORK_VERSION } from "../core/installation";
 import { discoverProject, inspectProject } from "../core/project";
 import { runLegacy } from "./legacy";
 import { loadResources } from "../core/payload";
-import { applyUpdate, planUpdate } from "../core/update";
+import { applySync, applyUpdate, planUpdate } from "../core/update";
 import { rollback } from "../core/transactions";
+import { agentPath, isHarness, renderAgent, roleBinding, ROLE_NAMES } from "../core/harness";
+import { runObserver } from "../core/observer";
 
 const HELP = `AIDLC ${FRAMEWORK_VERSION}
 Usage: aidlc [--cwd <project>] <command>
 
-  init [--preset default] [--harness codex] [--governance strict|standard|autonomous]
+  init [--preset default] [--harness codex|claude] [--governance strict|standard|autonomous]
+  sync [--dry-run]
+  harness [--role <role>] [--specialist] [--model <id>] [--reasoning <effort>]
   config
   doctor
+  observer status|list|show <id>
+  observer session --session <id> --intent <intent>
+  observer capture --file <json>
+  observer proposal stage --file <json>
+  observer proposal show <id>
+  observer proposal review <id> --decision approved|rejected --reviewer <session> --hash <hash> --note <text>
+  observer proposal apply|recover <id> --authorize <hash>
+  observer proposal export <id> --file <generalized-json> --output .aidlc/observations/exports/<name>.json
+  intent new <title> [--type feature|bug|experiment]
+  intent list
+  intent show <intent>
+  intent transition <intent> <status>
+  intent close <intent> [reason]
+  intent branch <intent>
+  intent status
   update --dry-run [--to ${FRAMEWORK_VERSION}]
   update --to ${FRAMEWORK_VERSION}
   update --recover <transaction-id>
@@ -26,7 +45,8 @@ Compatible commands: setup, check-setup, new, status, list, next, validate,
 branch <intent>, transition <intent> <status>, close <intent> [reason].
 
 Updates use only this package's bundled target. No network or publication is performed.
-Unity Mini, Task Observer, legacy-template adoption and sync are not available yet.
+Observer capture is opt-in and session-guided; automatic activation hooks are unavailable.
+Unity Mini and legacy-template adoption are not available yet.
 `;
 
 export function runCli(input: string[], resourcesDir?: string): number {
@@ -41,9 +61,68 @@ export function runCli(input: string[], resourcesDir?: string): number {
       argv.splice(cwdIndex, 2);
     }
     root = discoverProject(root);
-    const [command, ...args] = argv;
+    let [command, ...args] = argv;
+    const modernIntentCommand = command === "intent";
+    if (command === "intent") {
+      const [subcommand, ...rest] = args;
+      if (!["new", "list", "show", "transition", "close", "branch", "status"].includes(subcommand)) throw new Error(`Unknown intent command: ${subcommand ?? "(missing)"}. Run aidlc --help.`);
+      command = subcommand; args = rest;
+    }
     if (!command || ["help", "--help", "-h"].includes(command)) { console.log(HELP); return 0; }
     if (command === "--version") { console.log(FRAMEWORK_VERSION); return 0; }
+    if (command === "observer") {
+      console.log(JSON.stringify(runObserver(root, args), null, 2)); return 0;
+    }
+    if (command === "sync") {
+      if (args.length > 1 || (args.length && args[0] !== "--dry-run")) throw new Error("Usage: aidlc sync [--dry-run]");
+      if (!resourcesDir) throw new Error("Packaged resources are unavailable");
+      const resources = loadResources(resourcesDir);
+      if (args.length) {
+        const { changes, ...preview } = planUpdate(root, resources, FRAMEWORK_VERSION, true);
+        console.log(JSON.stringify(preview, null, 2));
+        return preview.actions.some(action => action.action === "conflict") ? 1 : 0;
+      }
+      console.log(JSON.stringify(applySync(root, resources), null, 2)); return 0;
+    }
+    if (command === "harness") {
+      if (!resourcesDir) throw new Error("Packaged resources are unavailable");
+      const config = loadProjectConfig(root);
+      const errors = configErrors(config);
+      if (errors.length) throw new Error(errors.join("\n"));
+      const harness = config.harness;
+      if (!isHarness(harness)) throw new Error(`Unsupported harness: ${harness}`);
+      const options: Record<string, string> = {};
+      for (let i = 0; i < args.length; i++) {
+        const key = args[i].slice(2);
+        if (!["--role", "--model", "--reasoning", "--specialist"].includes(args[i]) || Object.hasOwn(options, key)) throw new Error(`Invalid harness option: ${args[i]}`);
+        if (key === "specialist") options[key] = "true";
+        else {
+          const value = args[++i];
+          if (!value || value.startsWith("--")) throw new Error(`Missing value for --${key}`);
+          options[key] = value;
+        }
+      }
+      if (options.specialist && options.role && options.role !== "reviewer") throw new Error("--specialist applies only to the reviewer role");
+      if (!options.specialist && options.role === "reviewer-specialist") throw new Error("Use --specialist to select the specialist reviewer");
+      const selected = options.specialist ? "reviewer-specialist" : options.role;
+      if ((options.model || options.reasoning) && !selected) throw new Error("Task overrides require --role or --specialist");
+      if (selected && !ROLE_NAMES.includes(selected)) throw new Error(`Unsupported role: ${selected}`);
+      const resources = loadResources(resourcesDir);
+      const roles = selected ? [selected] : config.requiredAgents.filter(role => ROLE_NAMES.includes(role) && role !== "reviewer-specialist");
+      const handoff = Boolean(options.specialist || options.model || options.reasoning);
+      const bindings = roles.map(role => {
+        const template = resources.agents[(role === "reviewer-specialist" ? "reviewer" : role) + ".toml"];
+        const override = { ...config.roleBindings[role] };
+        if (options.model) override.model = options.model;
+        if (options.reasoning) override.reasoning = options.reasoning;
+        return {
+          role, path: agentPath(harness, role), requested: roleBinding(harness, role, template, override), runtime: "unverified",
+          ...(handoff ? { definition: renderAgent(harness, role, template, override) } : {}),
+        };
+      });
+      const execution = handoff ? "Load this definition in a separate task context and verify the active model and effort in the harness." : "Launch a new harness session to load agent files and verify the active model and effort.";
+      console.log(JSON.stringify({ harness, bindings, execution }, null, 2)); return 0;
+    }
     if (["update", "migrate"].includes(command)) {
       let target: string | undefined, recovery: string | undefined;
       let dryRun = false;
@@ -92,6 +171,7 @@ export function runCli(input: string[], resourcesDir?: string): number {
       if (args.length) throw new Error("doctor does not accept arguments");
       const result = inspectProject(root);
       console.log("AI-DLC Doctor");
+      if (result.observer) console.log("Task Observer: " + JSON.stringify(result.observer));
       for (const warning of result.warnings) console.warn(`Warning: ${warning}`);
       for (const error of result.errors) console.error(`Error: ${error}`);
       if (!result.errors.length) console.log("AI-DLC doctor completed");
@@ -105,12 +185,11 @@ export function runCli(input: string[], resourcesDir?: string): number {
       console.log(JSON.stringify(config, null, 2));
       return 0;
     }
-    if (!["setup", "check-setup", "new", "status", "list", "next", "validate", "branch", "transition", "close"].includes(command)) throw new Error(`Unknown command: ${command}. Run aidlc --help.`);
+    if (!["setup", "check-setup", "new", "status", "list", "show", "next", "validate", "branch", "transition", "close"].includes(command)) throw new Error(`Unknown command: ${command}. Run aidlc --help.`);
     const incompatible = compatibilityErrors(root, { allowMissingConfig: command === "setup" });
     if (incompatible.length) throw new Error(incompatible.join("\n"));
-    // Legacy commands retain their established cwd-based behavior at the CLI boundary.
-    process.chdir(root);
-    runLegacy([command, ...args]);
+    // Both interfaces share explicit-root Core operations.
+    runLegacy([command, ...args], root, { requireTitle: modernIntentCommand });
     return 0;
   } catch (error) {
     console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);

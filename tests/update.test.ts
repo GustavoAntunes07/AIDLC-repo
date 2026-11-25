@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
+import { runObserver } from "../packages/core/observer";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const node = Bun.which("node")!;
@@ -33,7 +34,7 @@ function write(path: string, text: string) {
   writeFileSync(absolute, text);
 }
 function upgrade() {
-  const result = cli("update", "--to", "0.2.0");
+  const result = cli("update", "--to", "0.4.0");
   expect(result.code).toBe(0);
   return JSON.parse(result.text) as { id: string; state: string; changed: boolean };
 }
@@ -76,7 +77,7 @@ describe("safe update from real 0.1.0 package", () => {
     const diagnostic = cli("doctor");
     expect(diagnostic.code).toBe(1);
     expect(diagnostic.text).toContain(abandoned.id);
-    expect(cli("update", "--to", "0.2.0").code).toBe(1);
+    expect(cli("update", "--to", "0.4.0").code).toBe(1);
     const interrupted = snapshot(workspace);
     expect(cli("rollback", abandoned.id, "--dry-run").code).toBe(0);
     expect(snapshot(workspace)).toEqual(interrupted);
@@ -147,7 +148,7 @@ describe("safe update from real 0.1.0 package", () => {
     expect(result.code).toBe(0);
     const plan = JSON.parse(result.text);
     expect(plan.from).toBe("0.1.0");
-    expect(plan.to).toBe("0.2.0");
+    expect(plan.to).toBe("0.4.0");
     expect(plan.migrations).toEqual(["installation manifest schema 1 -> 2; update protocol 1"]);
     expect(plan.actions.some((a: any) => a.path === "AGENTS.md" && a.action === "update")).toBe(true);
     expect(plan.actions.some((a: any) => a.path === ".aidlc/config.yaml" && a.action === "preserve")).toBe(true);
@@ -160,14 +161,33 @@ describe("safe update from real 0.1.0 package", () => {
     const existing = execute(oldCli, ["new", "Preserve this intent"]);
     expect(existing.code).toBe(0);
     const id = existing.text.match(/INTENT-[a-z0-9]+/)![0];
-    paths.push(`intents/${id}.md`);
+    const intentPath = "intents/" + id + ".md";
+    const intent = readFileSync(join(workspace, intentPath), "utf8");
+    const branch = intent.match(/^branch: (.+)$/m)![1];
+    write(".git/HEAD", "ref: refs/heads/" + branch + "\n");
+    write(".git/refs/heads/" + branch, "fixture\n");
+    write(".aidlc/config.yaml", readFileSync(join(workspace, ".aidlc/config.yaml"), "utf8") + "\nobserver:\n  enabled: true\n");
+    const session = runObserver(workspace, ["session", "--session", "session-preserve", "--intent", id]) as any;
+    write(".aidlc/observer-capture.json", JSON.stringify({ schemaVersion: 1, session: "session-preserve", intent: id, occurrence: "preservation", category: "workflow", evidence: "Sanitized evidence for update preservation.", skill: "general", suggestion: "Preserve this history.", sanitized: true }));
+    const observation = runObserver(workspace, ["capture", "--file", ".aidlc/observer-capture.json"]) as any;
+    write(".aidlc/observer-proposal.json", JSON.stringify({ schemaVersion: 1, intent: id, observations: [observation.id], target: "external:preservation", kind: "companion", candidate: "A reviewed companion proposal.\n" }));
+    const proposal = runObserver(workspace, ["proposal", "stage", "--file", ".aidlc/observer-proposal.json"]) as any;
+    write(intentPath, intent.replace("status: backlog", "status: review"));
+    runObserver(workspace, ["proposal", "review", proposal.id, "--decision", "approved", "--reviewer", "review-preservation", "--hash", proposal.hash, "--note", "Preserved review history."]);
+    paths.push(
+      intentPath,
+      ".aidlc/observations/sessions/" + session.id + ".json",
+      ".aidlc/observations/records/" + observation.id + ".json",
+      ".aidlc/observations/proposals/" + proposal.id + ".json",
+      ".aidlc/observations/reviews/" + proposal.id + "/00000001.json",
+    );
     const originals = new Map(paths.map(path => [path, readFileSync(join(workspace, path))]));
     const result = upgrade();
     expect(result.state).toBe("applied");
     const manifest = JSON.parse(readFileSync(join(workspace, ".aidlc/install.json"), "utf8"));
     expect(manifest.schemaVersion).toBe(2);
     expect(manifest.updateProtocol).toBe(1);
-    expect(manifest.frameworkVersion).toBe("0.2.0");
+    expect(manifest.frameworkVersion).toBe("0.4.0");
     expect(manifest.configSchemaVersion).toBe(1);
     for (const [path, bytes] of originals) expect(readFileSync(join(workspace, path)).equals(bytes)).toBe(true);
     expect(cli("doctor").code).toBe(0);
@@ -184,7 +204,7 @@ describe("safe update from real 0.1.0 package", () => {
     const preview = cli("update", "--dry-run");
     expect(preview.code).toBe(1);
     expect(JSON.parse(preview.text).actions).toContainEqual({ path, action: "conflict", reason: "Managed content differs from its installed baseline" });
-    const result = cli("update", "--to", "0.2.0");
+    const result = cli("update", "--to", "0.4.0");
     expect(result.code).toBe(1);
     expect(result.text).toContain("Update conflicts");
     expect(snapshot(workspace)).toEqual(before);
@@ -223,14 +243,14 @@ describe("safe update from real 0.1.0 package", () => {
   test.each(["first-write", "manifest-write"])("a real process interruption at %s is recoverable", (point) => {
     const before = snapshot(workspace, false);
     const script = join(fixtureRoot, `crash-${point}.ts`);
-    writeFileSync(script, `import { applyUpdate } from ${JSON.stringify(pathToFileURL(join(repo, "packages/core/update.ts")).href)};\nimport { loadResources } from ${JSON.stringify(pathToFileURL(join(repo, "packages/core/payload.ts")).href)};\napplyUpdate(process.argv[2], loadResources(process.argv[3]), "0.2.0", { afterWrite(path, count) { if (${JSON.stringify(point)} === "first-write" ? count === 1 : path === ".aidlc/install.json") process.exit(73); } });\n`);
+    writeFileSync(script, `import { applyUpdate } from ${JSON.stringify(pathToFileURL(join(repo, "packages/core/update.ts")).href)};\nimport { loadResources } from ${JSON.stringify(pathToFileURL(join(repo, "packages/core/payload.ts")).href)};\napplyUpdate(process.argv[2], loadResources(process.argv[3]), "0.4.0", { afterWrite(path, count) { if (${JSON.stringify(point)} === "first-write" ? count === 1 : path === ".aidlc/install.json") process.exit(73); } });\n`);
     const crash = Bun.spawnSync({ cmd: [process.execPath, script, workspace, join(repo, "resources")], stdout: "pipe", stderr: "pipe" });
     expect(crash.exitCode).toBe(73);
     const id = JSON.parse(readFileSync(join(workspace, ".aidlc/pending-update.json"), "utf8")).id;
     expect(cli("doctor").code).toBe(1);
     const interrupted = snapshot(workspace);
     expect(cli("new", "Blocked until recovery").code).toBe(1);
-    expect(cli("update", "--to", "0.2.0").code).toBe(1);
+    expect(cli("update", "--to", "0.4.0").code).toBe(1);
     expect(cli("init").code).toBe(1);
     expect(snapshot(workspace)).toEqual(interrupted);
     const recovered = cli("update", "--recover", id);
@@ -251,9 +271,9 @@ describe("safe update from real 0.1.0 package", () => {
   });
   test("migrate performs the bundled installation-schema upgrade and is idempotent", () => {
     expect(cli("migrate", "--dry-run").code).toBe(0);
-    expect(cli("migrate", "--to", "0.2.0").code).toBe(0);
+    expect(cli("migrate", "--to", "0.4.0").code).toBe(0);
     const before = snapshot(workspace);
-    expect(cli("migrate", "--to", "0.2.0").code).toBe(0);
+    expect(cli("migrate", "--to", "0.4.0").code).toBe(0);
     expect(snapshot(workspace)).toEqual(before);
   });
   test("unknown targets, network-source flags and missing explicit targets are refused without writes", () => {
@@ -269,7 +289,7 @@ describe("safe update from real 0.1.0 package", () => {
     manifest.managed.push({ path: ".aidlc/config.yaml", kind: "file", sha256: createHash("sha256").update(readFileSync(join(workspace, ".aidlc/config.yaml"))).digest("hex") });
     writeFileSync(manifestPath, JSON.stringify(manifest));
     const before = snapshot(workspace);
-    expect(cli("update", "--to", "0.2.0").code).toBe(1);
+    expect(cli("update", "--to", "0.4.0").code).toBe(1);
     expect(snapshot(workspace)).toEqual(before);
   });
   test("backup tampering is rejected before restoring any content", () => {
@@ -303,16 +323,16 @@ describe("safe update from real 0.1.0 package", () => {
     mkdirSync(outside, { recursive: true });
     symlinkSync(outside, join(workspace, ".aidlc/backups"), process.platform === "win32" ? "junction" : "dir");
     const before = snapshot(workspace);
-    expect(cli("update", "--to", "0.2.0").code).toBe(1);
+    expect(cli("update", "--to", "0.4.0").code).toBe(1);
     expect(readdirSync(outside)).toEqual([]);
     expect(snapshot(workspace)).toEqual(before);
   });
-  test("fresh 0.2.0 installation requires no migration or transaction", () => {
+  test("fresh 0.4.0 installation requires no migration or transaction", () => {
     const project = join(fixtureRoot, "new release");
     mkdirSync(project);
     expect(execute(current, ["init"], project).code).toBe(0);
     const before = snapshot(project);
-    const result = execute(current, ["update", "--to", "0.2.0"], project);
+    const result = execute(current, ["update", "--to", "0.4.0"], project);
     expect(result.code).toBe(0);
     expect(JSON.parse(result.text).changed).toBe(false);
     expect(snapshot(project)).toEqual(before);
